@@ -1,22 +1,22 @@
 """
 Technology Advisor Agent
 ========================
-Agent 4 in the Consulting Team System (CTS) pipeline.
+Agent 4 
 
 This module implements the Technology Advisor (TA) agent using CrewAI.
 It receives structured inputs from the Business Analyst (BA) and Solution Architect (SA)
 agents and produces a comprehensive, justified technology stack recommendation natively
 via a Crew execution.
 
-Inputs  : UserInput + BusinessAnalysis + SolutionArchitecture
-Output  : TechnologyRecommendation (structured JSON / Pydantic object)
+Inputs  : UserInput + BusinessAnalysis + SolutionArchitecture (JSON strings, Dicts, or Pydantic instances)
+Output  : TechnologyRecommendation (structured Pydantic object)
 """
 
 import os
 import sys
 import json
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 # Ensure standard output supports UTF-8 on Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -26,7 +26,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, Process, Task, LLM
 from crewai.tools import tool
 import requests
 
@@ -42,9 +42,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger("TechnologyAdvisor")
 
+# Environment setup for OpenRouter fallback routing
+openrouter_key = os.getenv("OPENROUTER_API_KEY")
+if openrouter_key:
+    os.environ["OPENAI_API_KEY"] = openrouter_key
+    os.environ["OPENAI_API_BASE"] = "https://openrouter.ai/api/v1"
+
 
 # ==============================================================================
-# SECTION 1: Pydantic Models (Input & Output Contracts)
+# SECTION 1: LLM Setup
+# ==============================================================================
+
+# LLM configuration set to inclusionai/ling-3.0-flash-vl:free via OpenRouter
+openrouter_llm = LLM(
+    model="openrouter/inclusionai/ling-3.0-flash-vl:free",
+    api_key=openrouter_key,
+    base_url="https://openrouter.ai/api/v1",
+    temperature=0.2,
+)
+
+
+# ==============================================================================
+# SECTION 2: Pydantic Models (Input & Output Contracts)
 # ==============================================================================
 
 class UserInput(BaseModel):
@@ -152,7 +171,7 @@ class TechnologyRecommendation(BaseModel):
 
 
 # ==============================================================================
-# SECTION 2: CrewAI Custom Tools
+# SECTION 3: CrewAI Custom Tools
 # ==============================================================================
 
 @tool("Search Internet via Serper")
@@ -188,7 +207,7 @@ def serper_search_tool(query: str) -> str:
 
 
 # ==============================================================================
-# SECTION 3: CrewAI Agent & Task Definition
+# SECTION 4: CrewAI Agent & Task Definition
 # ==============================================================================
 
 technology_advisor_agent = Agent(
@@ -203,6 +222,7 @@ technology_advisor_agent = Agent(
         "open-source vs. enterprise frameworks, scalability limits, security frameworks, and vendor lock-in."
     ),
     tools=[serper_search_tool],
+    llm=openrouter_llm,
     verbose=True,
     allow_delegation=False,
 )
@@ -219,27 +239,49 @@ technology_advisory_task = Task(
         "1. Select specific tools for Backend, Database, Cache, Frontend, and Containerization.\n"
         "2. Respect client preferences regarding cloud provider and open-source strategy.\n"
         "3. Provide at least one valid alternative technology choice per major component.\n"
-        "4. Include trade-offs, security controls, traffic scalability plans, and lock-in mitigation."
+        "4. Include trade-offs, security controls, traffic scalability plans, and lock-in mitigation.\n"
+        "5. Output MUST be valid JSON adhering strictly to the TechnologyRecommendation schema."
     ),
-    expected_output="A structured TechnologyRecommendation object adhering to the specified schema.",
+    expected_output="A JSON object matching the TechnologyRecommendation schema.",
     agent=technology_advisor_agent,
-    output_pydantic=TechnologyRecommendation,
+    # Note: Handled via safe JSON parsing in run_technology_advisor to prevent free-tier provider schema error
 )
 
 
 # ==============================================================================
-# SECTION 4: Execution Pipeline
+# SECTION 5: Execution Pipeline
 # ==============================================================================
 
 def run_technology_advisor(
-    user_input: UserInput,
-    business_analysis: BusinessAnalysis,
-    solution_architecture: SolutionArchitecture,
+    user_input: Union[str, dict, UserInput],
+    business_analysis: Union[str, dict, BusinessAnalysis],
+    solution_architecture: Union[str, dict, SolutionArchitecture],
 ) -> TechnologyRecommendation:
     """
     Execute the Technology Advisor task inside a standard CrewAI workflow.
+    
+    Accepts raw JSON strings, Python dicts, or Pydantic instances.
     """
     logger.info("Executing Technology Advisor Agent via CrewAI...")
+
+    def _normalize_to_json_str(val: Union[str, dict, BaseModel], model_cls: type) -> str:
+        """Converts incoming string/dict/Pydantic into formatted JSON string."""
+        if isinstance(val, str):
+            parsed = model_cls.model_validate_json(val)
+            return parsed.model_dump_json(indent=2)
+        elif isinstance(val, dict):
+            parsed = model_cls.model_validate(val)
+            return parsed.model_dump_json(indent=2)
+        elif isinstance(val, BaseModel):
+            return val.model_dump_json(indent=2)
+        else:
+            raise TypeError(f"Unsupported input type for {model_cls.__name__}: {type(val)}")
+
+    inputs = {
+        "user_input": _normalize_to_json_str(user_input, UserInput),
+        "business_analysis": _normalize_to_json_str(business_analysis, BusinessAnalysis),
+        "solution_architecture": _normalize_to_json_str(solution_architecture, SolutionArchitecture),
+    }
 
     crew = Crew(
         agents=[technology_advisor_agent],
@@ -248,13 +290,21 @@ def run_technology_advisor(
         verbose=True,
     )
 
-    inputs = {
-        "user_input": json.dumps(user_input.model_dump(), indent=2),
-        "business_analysis": json.dumps(business_analysis.model_dump(), indent=2),
-        "solution_architecture": json.dumps(solution_architecture.model_dump(), indent=2),
-    }
-
     result = crew.kickoff(inputs=inputs)
     
-    # Return the parsed Pydantic model produced directly by CrewAI
-    return result.pydantic
+    # Check for direct Pydantic attribute first
+    if hasattr(result, "pydantic") and result.pydantic:
+        return result.pydantic
+    elif hasattr(result, "tasks_output") and result.tasks_output and result.tasks_output[0].pydantic:
+        return result.tasks_output[0].pydantic
+
+    # Clean codeblock wrappers if present and parse manually
+    raw_str = result.raw.strip()
+    if raw_str.startswith("```json"):
+        raw_str = raw_str[7:]
+    if raw_str.startswith("```"):
+        raw_str = raw_str[3:]
+    if raw_str.endswith("```"):
+        raw_str = raw_str[:-3]
+
+    return TechnologyRecommendation.model_validate_json(raw_str.strip())
