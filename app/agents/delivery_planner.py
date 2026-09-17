@@ -1,106 +1,109 @@
 from crewai import Agent, Task
-from app.config.llm import llm
+
 from app.models.delivery_planner import DeliveryPlan
 
 
+def create_delivery_planner(llm, 
+        business_analysis, 
+        architecture, 
+        technology_advice
+    ):
 
-delivery_planner = Agent(
-    role="Delivery Planner and Project Execution Specialist",
+    delivery_planner_agent = Agent(
+        role="Delivery Planner and Project Execution Specialist",
 
-    goal=(
-        "Convert the business requirements, system architecture, "
-        "and technology recommendations into a realistic and "
-        "well-structured project delivery plan."
-    ),
+        goal=(
+            "Convert the business requirements, system architecture, "
+            "and technology recommendations into a realistic and "
+            "well-structured project delivery plan."
+        ),
 
-    backstory=(
-        "You are an experienced technical delivery planner who works "
-        "with software engineering teams. You understand project "
-        "phases, work breakdown structures, dependencies, risks, "
-        "testing, deployment, team responsibilities, and MVP planning. "
-        "You do not unnecessarily add features or technologies. "
-        "You create practical plans that respect the given timeline, "
-        "constraints, and technology decisions."
-    ),
+        backstory=(
+            "You are an experienced technical delivery planner who works "
+            "with software engineering teams. You understand project "
+            "phases, work breakdown structures, dependencies, risks, "
+            "testing, deployment, team responsibilities, and MVP planning. "
+            "You do not unnecessarily add features or technologies. "
+            "You create practical plans that respect the given timeline, "
+            "constraints, and technology decisions."
+        ),
 
-    llm=llm,
-    verbose=True,
-    allow_delegation=False
-)
+        llm=llm,
+        verbose=True,
+        allow_delegation=False
+    )
 
+    delivery_planner_task = Task(
+        description=f"""
+            You are the final Delivery Planner Agent in a multi-agent
+            AI solution consulting system.
 
+            Use the following outputs from the previous agents.
 
+            ================ BUSINESS ANALYST OUTPUT ================
+            {business_analysis}
 
-delivery_task = Task(
-    description="""
-        You are the final Delivery Planner Agent in a multi-agent
-        AI solution consulting system.
+            ================ SOLUTION ARCHITECT OUTPUT ================
+            {architecture}
 
-        Use the following outputs from the previous agents.
+            ================ TECHNOLOGY ADVISOR OUTPUT ================
+            {technology_advice}
 
-        ================ BUSINESS ANALYST OUTPUT ================
-        {business_analysis}
+            =========================================================
 
-        ================ SOLUTION ARCHITECT OUTPUT ================
-        {architecture}
+            Create a complete and realistic delivery plan for the proposed
+            software solution.
 
-        ================ TECHNOLOGY ADVISOR OUTPUT ================
-        {technology_advice}
+            Your plan must include:
 
-        ===========================================================
+            1. Project delivery overview
+            2. MVP scope
+            3. Future scope
+            4. Major workstreams
+            5. Development phases
+            6. Timeline for every phase
+            7. Team roles and responsibilities
+            8. Dependencies between tasks
+            9. Project risks and mitigation strategies
+            10. Testing strategy
+            11. Deployment plan
+            12. Maintenance and future evolution
+            13. Assumptions and open questions
 
-        Create a complete and realistic delivery plan for the proposed
-        software solution.
+            Important rules:
 
-        Your plan must include:
+            - Respect the business requirements.
+            - Follow the architecture proposed by the Solution Architect.
+            - Follow the technology recommendations from the Technology Advisor.
+            - Do not introduce unnecessary technologies.
+            - Keep the MVP realistic.
+            - Mention if any timeline or requirement appears unrealistic.
+            - Use clear headings and structured data.
+            - Return the final answer as valid JSON only.
+        """,
 
-        1. Project delivery overview
-        2. MVP scope
-        3. Future scope
-        4. Major workstreams
-        5. Development phases
-        6. Timeline for every phase
-        7. Team roles and responsibilities
-        8. Dependencies between tasks
-        9. Project risks and mitigation strategies
-        10. Testing strategy
-        11. Deployment plan
-        12. Maintenance and future evolution
-        13. Assumptions and open questions
+        expected_output="""
+            A valid JSON object containing:
 
-        Important rules:
+            {
+                "delivery_overview": "...",
+                "mvp_scope": [],
+                "future_scope": [],
+                "workstreams": [],
+                "timeline": [],
+                "team": [],
+                "dependencies": [],
+                "risks": [],
+                "testing_strategy": [],
+                "deployment_plan": [],
+                "maintenance_plan": [],
+                "assumptions": [],
+                "open_questions": []
+            }
+        """,
 
-        - Respect the business requirements.
-        - Follow the architecture proposed by the Solution Architect.
-        - Follow the technology recommendations from the Technology Advisor.
-        - Do not introduce unnecessary technologies.
-        - Keep the MVP realistic.
-        - Mention if any timeline or requirement appears unrealistic.
-        - Use clear headings and structured data.
-        - Return the final answer as valid JSON only.
-    """,
+        agent=delivery_planner_agent,
+        output_pydantic=DeliveryPlan
+    )
 
-    expected_output="""
-        A valid JSON object containing:
-
-        {
-        "delivery_overview": "...",
-        "mvp_scope": [],
-        "future_scope": [],
-        "workstreams": [],
-        "timeline": [],
-        "team": [],
-        "dependencies": [],
-        "risks": [],
-        "testing_strategy": [],
-        "deployment_plan": [],
-        "maintenance_plan": [],
-        "assumptions": [],
-        "open_questions": []
-        }
-    """,
-
-    agent=delivery_planner,
-    output_pydantic=DeliveryPlan
-)
-
+    return delivery_planner_agent, delivery_planner_task
