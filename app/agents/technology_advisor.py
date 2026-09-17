@@ -259,7 +259,7 @@ technology_advisory_task = Task(
         "   scalability_considerations, technology_risks, lock_in_considerations.\n"
         "4. Honour delivery_timeline_months, expected_daily_traffic, "
         "   data_hosting_country.\n\n"
-        "You MAY use the 'Search Internet via Serper' tool (1-3 searches max).\n\n"
+        "You MUST use the 'Search Internet via Serper' tool (1-3 searches max).\n\n"
         "Return ONLY valid JSON matching EXACTLY this schema — no extra fields, "
         "no missing fields, no markdown fences:\n\n"
         "{\n"
