@@ -2,33 +2,34 @@ from pydantic import BaseModel
 from typing import List
 
 
-class ArchitectureComponent(BaseModel):
+class Component(BaseModel):
+    """A single architectural component."""
     name: str
     responsibility: str
 
 
-class DataStore(BaseModel):
-    name: str
+class DatabaseDesign(BaseModel):
+    """Database layer specification."""
+    type: str
+    purpose: str
+
+
+class CacheDesign(BaseModel):
+    """Cache layer specification."""
+    required: bool
     purpose: str
 
 
 class SolutionArchitecture(BaseModel):
+    """Structured output produced by the Solution Architect (SA) agent."""
     architecture_style: str
-
-    components: List[ArchitectureComponent]
-
-    data_stores: List[DataStore]
-
+    components: List[Component]
+    database: DatabaseDesign
+    cache: CacheDesign
     data_flow: List[str]
-
     security: List[str]
-
     scalability: List[str]
-
     mvp_architecture: List[str]
-
     future_evolution: List[str]
-
     architecture_rationale: str
-
-    risks: List[str]
+    architecture_risks: List[str]
