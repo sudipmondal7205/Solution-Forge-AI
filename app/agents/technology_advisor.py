@@ -1,14 +1,14 @@
 """
 Technology Advisor Agent
 ========================
-Agent 4 
+ 
 
-This module implements the Technology Advisor (TA) agent using CrewAI.
-It receives structured inputs from the Business Analyst (BA) and Solution Architect (SA)
-agents and produces a comprehensive, justified technology stack recommendation natively
-via a Crew execution.
+Receives the common UserInput plus the Business Analyst (BA) and Solution
+Architect (SA) outputs, and produces a specific, justified technology stack
+recommendation.
 
-Inputs  : UserInput + BusinessAnalysis + SolutionArchitecture (JSON strings, Dicts, or Pydantic instances)
+Inputs  : UserInput + BusinessAnalysis + SolutionArchitecture
+          (JSON strings, dicts, or Pydantic instances)
 Output  : TechnologyRecommendation (structured Pydantic object)
 """
 
@@ -16,9 +16,9 @@ import os
 import sys
 import json
 import logging
-from typing import List, Optional, Union
+from typing import List, Union
 
-# Ensure standard output supports UTF-8 on Windows consoles
+# Ensure UTF-8 stdout/stderr on Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from crewai import Agent, Crew, Process, Task, LLM
 from crewai.tools import tool
 import requests
+
 
 # ---------------------------------------------------------------------------
 # Environment & Logging
@@ -42,23 +43,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger("TechnologyAdvisor")
 
-# Environment setup for OpenRouter fallback routing
-openrouter_key = os.getenv("OPENROUTER_API_KEY")
-if openrouter_key:
-    os.environ["OPENAI_API_KEY"] = openrouter_key
-    os.environ["OPENAI_API_BASE"] = "https://openrouter.ai/api/v1"
-
 
 # ==============================================================================
-# SECTION 1: LLM Setup
+# SECTION 1: LLM Setup (Gemini)
 # ==============================================================================
 
-# LLM configuration set to inclusionai/ling-3.0-flash-vl:free via OpenRouter
-openrouter_llm = LLM(
-    model="openrouter/inclusionai/ling-3.0-flash-vl:free",
-    api_key=openrouter_key,
-    base_url="https://openrouter.ai/api/v1",
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    raise EnvironmentError("GEMINI_API_KEY is not set in environment variables.")
+
+
+gemini_llm = LLM(
+    model="gemini/gemini-3.5-flash-lite",
+    api_key=GEMINI_API_KEY,
     temperature=0.2,
+    max_output_tokens=8192,
 )
 
 
@@ -124,7 +124,7 @@ class SolutionArchitecture(BaseModel):
     architecture_risks: List[str]
 
 
-# --- TA Output Models ---
+# --- TA Output Models (matches the contract you pasted) ---
 
 class Technology(BaseModel):
     """A single technology recommendation for a specific category."""
@@ -157,7 +157,7 @@ class TradeOff(BaseModel):
 class TechnologyRecommendation(BaseModel):
     """
     Complete technology recommendation produced by the Technology Advisor agent.
-    This is the output contract passed to the Delivery Planner (DP) agent.
+    This is the output contract passed to the Task Advisor and Delivery Planner.
     """
     technologies: List[Technology]
     cloud: CloudServices
@@ -171,14 +171,14 @@ class TechnologyRecommendation(BaseModel):
 
 
 # ==============================================================================
-# SECTION 3: CrewAI Custom Tools
+# SECTION 3: CrewAI Custom Tool (Serper.dev)
 # ==============================================================================
 
 @tool("Search Internet via Serper")
 def serper_search_tool(query: str) -> str:
     """
-    Perform a Google search via Serper.dev to find up-to-date tech stack benchmarks,
-    cloud service capabilities, or library recommendations.
+    Perform a Google search via Serper.dev to find current technology comparisons,
+    library versions, cloud service capabilities, or framework benchmarks.
     """
     serper_api_key = os.getenv("SERPER_API_KEY")
     if not serper_api_key:
@@ -187,21 +187,31 @@ def serper_search_tool(query: str) -> str:
     try:
         response = requests.post(
             "https://google.serper.dev/search",
-            headers={"X-API-KEY": serper_api_key, "Content-Type": "application/json"},
-            json={"q": query},
-            timeout=10,
+            headers={
+                "X-API-KEY": serper_api_key,
+                "Content-Type": "application/json",
+            },
+            json={"q": query, "num": 5},
+            timeout=15,
         )
         response.raise_for_status()
         results = response.json()
 
-        if "organic" in results:
-            snippets = [
-                f"- {r.get('title')}: {r.get('snippet')}"
-                for r in results["organic"][:3]
-            ]
-            return "\n".join(snippets)
+        lines = []
+        for r in results.get("organic", [])[:5]:
+            lines.append(
+                f"- {r.get('title', '')}\n"
+                f"  URL: {r.get('link', '')}\n"
+                f"  {r.get('snippet', '')}"
+            )
 
-        return "No organic results found."
+        kg = results.get("knowledgeGraph")
+        if kg:
+            lines.append(
+                f"\nKnowledge Graph:\n  {kg.get('title', '')}: {kg.get('description', '')}"
+            )
+
+        return "\n".join(lines) if lines else "No results found."
     except Exception as exc:
         return f"Search error: {exc}"
 
@@ -213,44 +223,105 @@ def serper_search_tool(query: str) -> str:
 technology_advisor_agent = Agent(
     role="Principal Technology Advisor",
     goal=(
-        "Select a specific, well-justified technology stack that strictly aligns with "
-        "the architecture design, client constraints, cloud preferences, and delivery timeline."
+        "Select a specific, well-justified technology stack that strictly aligns "
+        "with the solution architecture, client constraints, cloud preferences, "
+        "and delivery timeline."
     ),
     backstory=(
-        "You are a senior technical advisor with deep expertise in full-stack architecture, "
-        "cloud infrastructure, database selection, and DevOps practices. You rigorously evaluate "
-        "open-source vs. enterprise frameworks, scalability limits, security frameworks, and vendor lock-in."
+        "You are a senior technical advisor with deep expertise in full-stack "
+        "architecture, cloud infrastructure, database selection, and DevOps "
+        "practices. You rigorously evaluate open-source vs enterprise frameworks, "
+        "scalability limits, security frameworks, and vendor lock-in. You use web "
+        "search to validate current best practices before recommending a stack."
     ),
     tools=[serper_search_tool],
-    llm=openrouter_llm,
+    llm=gemini_llm,
     verbose=True,
     allow_delegation=False,
+    max_iter=6,
+    max_rpm=30,
 )
+
 
 technology_advisory_task = Task(
     description=(
-        "Analyze the provided inputs from the client, Business Analyst, and Solution Architect. "
-        "Recommend a complete, production-ready technology stack.\n\n"
-        "Input Context:\n"
+        "Analyze the inputs below and recommend a complete, production-ready "
+        "technology stack.\n\n"
         "=== USER INPUT ===\n{user_input}\n\n"
         "=== BUSINESS ANALYSIS ===\n{business_analysis}\n\n"
         "=== SOLUTION ARCHITECTURE ===\n{solution_architecture}\n\n"
         "Requirements:\n"
-        "1. Select specific tools for Backend, Database, Cache, Frontend, and Containerization.\n"
-        "2. Respect client preferences regarding cloud provider and open-source strategy.\n"
-        "3. Provide at least one valid alternative technology choice per major component.\n"
-        "4. Include trade-offs, security controls, traffic scalability plans, and lock-in mitigation.\n"
-        "5. Output MUST be valid JSON adhering strictly to the TechnologyRecommendation schema."
+        "1. Select specific tools for at least these categories: Backend, "
+        "   Database, Cache, Frontend, Containerization.\n"
+        "2. Respect technology_preference (e.g. open-source) and "
+        "   cloud_preference (e.g. AWS).\n"
+        "3. Include alternatives, trade_offs, security_considerations, "
+        "   scalability_considerations, technology_risks, lock_in_considerations.\n"
+        "4. Honour delivery_timeline_months, expected_daily_traffic, "
+        "   data_hosting_country.\n\n"
+        "You MAY use the 'Search Internet via Serper' tool (1-3 searches max).\n\n"
+        "Return ONLY valid JSON matching EXACTLY this schema — no extra fields, "
+        "no missing fields, no markdown fences:\n\n"
+        "{\n"
+        '  "technologies": [\n'
+        '    {"category": "Backend", "technology": "FastAPI", "reason": "..."}\n'
+        "  ],\n"
+        '  "cloud": {"provider": "AWS", "services": ["EC2", "RDS"]},\n'
+        '  "technology_strategy": "Open-source-first",\n'
+        '  "alternatives": [\n'
+        '    {"category": "Backend", "recommended": "FastAPI", '
+        '"alternative": "Spring Boot", "reason": "..."}\n'
+        "  ],\n"
+        '  "trade_offs": [\n'
+        '    {"decision": "PostgreSQL", '
+        '"advantages": ["..."], "disadvantages": ["..."]}\n'
+        "  ],\n"
+        '  "security_considerations": ["..."],\n'
+        '  "scalability_considerations": ["..."],\n'
+        '  "technology_risks": ["..."],\n'
+        '  "lock_in_considerations": ["..."]\n'
+        "}\n"
     ),
-    expected_output="A JSON object matching the TechnologyRecommendation schema.",
+    expected_output=(
+        "A single JSON object with keys: technologies, cloud, "
+        "technology_strategy (string), alternatives, trade_offs, "
+        "security_considerations, scalability_considerations, "
+        "technology_risks, lock_in_considerations."
+    ),
     agent=technology_advisor_agent,
-    # Note: Handled via safe JSON parsing in run_technology_advisor to prevent free-tier provider schema error
 )
-
-
 # ==============================================================================
 # SECTION 5: Execution Pipeline
 # ==============================================================================
+
+def _normalize_to_json_str(
+    val: Union[str, dict, BaseModel],
+    model_cls: type,
+) -> str:
+    """Convert incoming string / dict / Pydantic instance into indented JSON."""
+    if isinstance(val, str):
+        parsed = model_cls.model_validate_json(val)
+        return parsed.model_dump_json(indent=2)
+    elif isinstance(val, dict):
+        parsed = model_cls.model_validate(val)
+        return parsed.model_dump_json(indent=2)
+    elif isinstance(val, BaseModel):
+        return val.model_dump_json(indent=2)
+    else:
+        raise TypeError(f"Unsupported input type for {model_cls.__name__}: {type(val)}")
+
+
+def _strip_code_fences(raw: str) -> str:
+    """Remove ```json ... ``` or ``` ... ``` wrappers if present."""
+    s = raw.strip()
+    if s.startswith("```json"):
+        s = s[len("```json"):]
+    elif s.startswith("```"):
+        s = s[len("```"):]
+    if s.endswith("```"):
+        s = s[:-len("```")]
+    return s.strip()
+
 
 def run_technology_advisor(
     user_input: Union[str, dict, UserInput],
@@ -258,29 +329,19 @@ def run_technology_advisor(
     solution_architecture: Union[str, dict, SolutionArchitecture],
 ) -> TechnologyRecommendation:
     """
-    Execute the Technology Advisor task inside a standard CrewAI workflow.
-    
+    Execute the Technology Advisor inside a CrewAI workflow.
+
     Accepts raw JSON strings, Python dicts, or Pydantic instances.
+    Returns a validated TechnologyRecommendation.
     """
     logger.info("Executing Technology Advisor Agent via CrewAI...")
-
-    def _normalize_to_json_str(val: Union[str, dict, BaseModel], model_cls: type) -> str:
-        """Converts incoming string/dict/Pydantic into formatted JSON string."""
-        if isinstance(val, str):
-            parsed = model_cls.model_validate_json(val)
-            return parsed.model_dump_json(indent=2)
-        elif isinstance(val, dict):
-            parsed = model_cls.model_validate(val)
-            return parsed.model_dump_json(indent=2)
-        elif isinstance(val, BaseModel):
-            return val.model_dump_json(indent=2)
-        else:
-            raise TypeError(f"Unsupported input type for {model_cls.__name__}: {type(val)}")
 
     inputs = {
         "user_input": _normalize_to_json_str(user_input, UserInput),
         "business_analysis": _normalize_to_json_str(business_analysis, BusinessAnalysis),
-        "solution_architecture": _normalize_to_json_str(solution_architecture, SolutionArchitecture),
+        "solution_architecture": _normalize_to_json_str(
+            solution_architecture, SolutionArchitecture
+        ),
     }
 
     crew = Crew(
@@ -291,20 +352,17 @@ def run_technology_advisor(
     )
 
     result = crew.kickoff(inputs=inputs)
-    
-    # Check for direct Pydantic attribute first
+
+    # 1) Prefer structured pydantic output if CrewAI produced it.
     if hasattr(result, "pydantic") and result.pydantic:
         return result.pydantic
-    elif hasattr(result, "tasks_output") and result.tasks_output and result.tasks_output[0].pydantic:
+    if (
+        hasattr(result, "tasks_output")
+        and result.tasks_output
+        and getattr(result.tasks_output[0], "pydantic", None)
+    ):
         return result.tasks_output[0].pydantic
 
-    # Clean codeblock wrappers if present and parse manually
-    raw_str = result.raw.strip()
-    if raw_str.startswith("```json"):
-        raw_str = raw_str[7:]
-    if raw_str.startswith("```"):
-        raw_str = raw_str[3:]
-    if raw_str.endswith("```"):
-        raw_str = raw_str[:-3]
-
-    return TechnologyRecommendation.model_validate_json(raw_str.strip())
+    # 2) Fall back to manual JSON parsing.
+    raw_str = _strip_code_fences(getattr(result, "raw", str(result)))
+    return TechnologyRecommendation.model_validate_json(raw_str)
