@@ -11,8 +11,9 @@ if not COHERE_API_KEY:
     raise EnvironmentError("COHERE_API_KEY is not set in environment variables.")
 
 llm = LLM(
-    model="cohere/command-r-plus",
+    model="cohere/command-a-03-2025",
     api_key=COHERE_API_KEY,
-    temperature=0.2
+    temperature=0.2,
+    additional_drop_params=["strict"],
 )
 
