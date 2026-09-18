@@ -8,7 +8,7 @@ from app.agents.delivery_planner import create_delivery_planner
 
 
 #creates entire crewAI workflow
-def create_solution_crew(llm, user_input, business_problem, 
+def create_solution_crew(llm, user_input,
         business_analysis=None, 
         solution_architecture=None, 
         technology_advice=None
