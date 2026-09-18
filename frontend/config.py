@@ -3,8 +3,7 @@ config.py
 =========
 Single source of truth for backend connectivity.
 
-BACKEND ENGINEER: this is the ONLY file you should need to look at to know
-which URLs the frontend will call. Change API_BASE_URL to point at your
+Change API_BASE_URL to point at your
 running FastAPI service and set USE_MOCK_DATA = False once the endpoints
 below exist. Nothing else in the frontend needs to change.
 
