@@ -1,0 +1,187 @@
+"""
+api_client.py
+=============
+Every network call the frontend makes lives here — nowhere else in the
+codebase calls `requests` directly. This means:
+
+  * The backend engineer can read this ONE file top-to-bottom to see every
+    endpoint the frontend needs, with exact request/response shapes.
+  * Swapping from mock data to the real backend is a single flag flip in
+    config.py (USE_MOCK_DATA) — no changes needed in views/*.py.
+  * Every function raises `ApiError(message)` on failure, which views catch
+    and display via st.error(). Never leak raw exceptions to the UI.
+"""
+
+from typing import List, Optional
+
+import requests
+
+import config
+import mock_data
+
+
+class ApiError(Exception):
+    """Raised for any failed API call. `str(err)` is safe to show to the user."""
+    pass
+
+
+def _headers(token: Optional[str] = None) -> dict:
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _handle_response(response: requests.Response) -> dict:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    if not response.ok:
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        raise ApiError(detail or f"Request failed with status {response.status_code}.")
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+def register(username: str, email: str, password: str) -> dict:
+    """POST /auth/register -> {"message": str}"""
+    if config.USE_MOCK_DATA:
+        return {"message": "Account created successfully. Please log in."}
+    try:
+        resp = requests.post(
+            f"{config.API_BASE_URL}/auth/register",
+            json={"username": username, "email": email, "password": password},
+            headers=_headers(),
+            timeout=config.REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise ApiError(f"Could not reach the server: {exc}") from exc
+    return _handle_response(resp)
+
+
+def login(email: str, password: str) -> dict:
+    """POST /auth/login -> {"access_token": str, "user": {"username", "email"}}"""
+    if config.USE_MOCK_DATA:
+        return {
+            "access_token": "mock-token-123",
+            "token_type": "bearer",
+            "user": {"username": email.split("@")[0], "email": email},
+        }
+    try:
+        resp = requests.post(
+            f"{config.API_BASE_URL}/auth/login",
+            json={"email": email, "password": password},
+            headers=_headers(),
+            timeout=config.REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise ApiError(f"Could not reach the server: {exc}") from exc
+    return _handle_response(resp)
+
+
+# ---------------------------------------------------------------------------
+# Consultations
+# ---------------------------------------------------------------------------
+def create_consultation(token: str, user_input: dict) -> dict:
+    """POST /consultations -> {"consultation_id": str, "status": "processing"}"""
+    if config.USE_MOCK_DATA:
+        consultation_id = mock_data.start_mock_consultation(user_input)
+        return {"consultation_id": consultation_id, "status": "processing"}
+    try:
+        resp = requests.post(
+            f"{config.API_BASE_URL}/consultations",
+            json=user_input,
+            headers=_headers(token),
+            timeout=config.REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise ApiError(f"Could not reach the server: {exc}") from exc
+    return _handle_response(resp)
+
+
+def get_consultation_status(token: str, consultation_id: str) -> dict:
+    """GET /consultations/{id}/status -> {"overall_status": str, "agents": {...}}"""
+    if config.USE_MOCK_DATA:
+        return mock_data.get_mock_status(consultation_id)
+    try:
+        resp = requests.get(
+            f"{config.API_BASE_URL}/consultations/{consultation_id}/status",
+            headers=_headers(token),
+            timeout=config.REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise ApiError(f"Could not reach the server: {exc}") from exc
+    return _handle_response(resp)
+
+
+def get_consultation_result(token: str, consultation_id: str) -> dict:
+    """GET /consultations/{id}/result -> combined agent outputs (see models.py)"""
+    if config.USE_MOCK_DATA:
+        return mock_data.get_mock_result(consultation_id)
+    try:
+        resp = requests.get(
+            f"{config.API_BASE_URL}/consultations/{consultation_id}/result",
+            headers=_headers(token),
+            timeout=config.REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise ApiError(f"Could not reach the server: {exc}") from exc
+    return _handle_response(resp)
+
+
+def get_consultation_history(token: str) -> List[dict]:
+    """GET /consultations -> [{"consultation_id", "title", "date", "cloud_preference", "status"}, ...]"""
+    if config.USE_MOCK_DATA:
+        return mock_data.get_mock_history()
+    try:
+        resp = requests.get(
+            f"{config.API_BASE_URL}/consultations",
+            headers=_headers(token),
+            timeout=config.REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise ApiError(f"Could not reach the server: {exc}") from exc
+    payload = _handle_response(resp)
+    return payload if isinstance(payload, list) else payload.get("items", [])
+
+
+def export_blueprint_html(token: str, consultation_id: str) -> str:
+    """
+    GET /consultations/{id}/export?format=html
+    Returns the raw HTML string of the blueprint report, ready to hand to
+    st.download_button as bytes.
+    """
+    if config.USE_MOCK_DATA:
+        result = mock_data.get_mock_result(consultation_id)
+        return _render_fallback_html(result)
+    try:
+        resp = requests.get(
+            f"{config.API_BASE_URL}/consultations/{consultation_id}/export",
+            params={"format": "html"},
+            headers=_headers(token),
+            timeout=config.REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise ApiError(f"Could not reach the server: {exc}") from exc
+    if not resp.ok:
+        raise ApiError(f"Export failed with status {resp.status_code}.")
+    content_type = resp.headers.get("Content-Type", "")
+    if "application/json" in content_type:
+        return resp.json().get("html", "")
+    return resp.text
+
+
+def _render_fallback_html(result: dict) -> str:
+    """Minimal standalone HTML export used only in mock mode."""
+    ba = result.get("business_analysis", {})
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>AI Solution Blueprint</title></head>
+<body style="font-family: sans-serif; max-width: 800px; margin: 40px auto;">
+<h1>AI Solution Blueprint</h1>
+<p>Generated by SolutionForge AI (mock export)</p>
+<h2>Problem Statement</h2>
+<p>{ba.get("problem_statement", "")}</p>
+</body></html>"""
