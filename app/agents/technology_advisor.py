@@ -112,18 +112,19 @@ def create_technology_advisor(llm,
 
 
     technology_advisory_task = Task(
-        description=f"""
+        description=(
+            """
             Analyze the inputs below and recommend a complete,
             production-ready technology stack.
 
             === USER INPUT ===
-            {user_input}
+            __USER_INPUT__
 
             === BUSINESS ANALYSIS ===
-            {business_analysis}
+            __BUSINESS_ANALYSIS__
 
             === SOLUTION ARCHITECTURE ===
-            {solution_architecture}
+            __SOLUTION_ARCHITECTURE__
 
             Requirements:
 
@@ -204,7 +205,11 @@ def create_technology_advisor(llm,
 
                 "lock_in_considerations": ["..."]
             }
-        """,
+            """
+            .replace("__USER_INPUT__", str(user_input))
+            .replace("__BUSINESS_ANALYSIS__", str(business_analysis))
+            .replace("__SOLUTION_ARCHITECTURE__", str(solution_architecture))
+        ),
 
         expected_output="""
             A single JSON object with the following keys:
