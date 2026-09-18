@@ -1,27 +1,13 @@
-"""
-Technology Advisor Agent
-========================
-
-Receives the common UserInput plus the Business Analyst (BA) and
-Solution Architect (SA) outputs, and produces a specific, justified
-technology stack recommendation.
-
-Inputs  : UserInput + BusinessAnalysis + SolutionArchitecture
-Output  : TechnologyRecommendation
-"""
-
-import os
 import requests
-
 from crewai import Agent, Task
 from crewai.tools import tool
-from app.models.technology_advisor import TechnologyRecommendation
-
+from backend.models.technology_advisor import TechnologyRecommendation
+from backend.core.config import settings
+from backend.core.llm import gemini_llm
 
 def create_technology_advisor(llm, 
         user_input, 
-        business_analysis,
-        solution_architecture
+        context=None
     ):
 
     @tool("Search Internet via Serper")
@@ -32,7 +18,7 @@ def create_technology_advisor(llm,
         framework benchmarks.
         """
 
-        serper_api_key = os.getenv("SERPER_API_KEY")
+        serper_api_key = settings.SERPER_API_KEY
 
         if not serper_api_key:
             return "Search unavailable: SERPER_API_KEY not set."
@@ -102,7 +88,7 @@ def create_technology_advisor(llm,
 
         tools=[serper_search_tool],
 
-        llm=llm,
+        llm=gemini_llm,
         verbose=True,
         allow_delegation=False,
 
@@ -112,19 +98,11 @@ def create_technology_advisor(llm,
 
 
     technology_advisory_task = Task(
-        description=(
-            """
-            Analyze the inputs below and recommend a complete,
-            production-ready technology stack.
+        description=f"""
+            Analyze the user input and the outputs from the Business Analyst and Solution Architect to recommend a complete, production-ready technology stack.
 
             === USER INPUT ===
-            __USER_INPUT__
-
-            === BUSINESS ANALYSIS ===
-            __BUSINESS_ANALYSIS__
-
-            === SOLUTION ARCHITECTURE ===
-            __SOLUTION_ARCHITECTURE__
+            {user_input}
 
             Requirements:
 
@@ -161,55 +139,7 @@ def create_technology_advisor(llm,
 
             8. Return ONLY valid JSON matching EXACTLY the expected
                schema. Do not include markdown fences or extra text.
-
-            Expected JSON structure:
-
-            {
-                "technologies": [
-                    {
-                        "category": "Backend",
-                        "technology": "FastAPI",
-                        "reason": "..."
-                    }
-                ],
-
-                "cloud": {
-                    "provider": "AWS",
-                    "services": ["EC2", "RDS"]
-                },
-
-                "technology_strategy": "Open-source-first",
-
-                "alternatives": [
-                    {
-                        "category": "Backend",
-                        "recommended": "FastAPI",
-                        "alternative": "Spring Boot",
-                        "reason": "..."
-                    }
-                ],
-
-                "trade_offs": [
-                    {
-                        "decision": "PostgreSQL",
-                        "advantages": ["..."],
-                        "disadvantages": ["..."]
-                    }
-                ],
-
-                "security_considerations": ["..."],
-
-                "scalability_considerations": ["..."],
-
-                "technology_risks": ["..."],
-
-                "lock_in_considerations": ["..."]
-            }
-            """
-            .replace("__USER_INPUT__", str(user_input))
-            .replace("__BUSINESS_ANALYSIS__", str(business_analysis))
-            .replace("__SOLUTION_ARCHITECTURE__", str(solution_architecture))
-        ),
+        """,
 
         expected_output="""
             A single JSON object with the following keys:
@@ -226,8 +156,8 @@ def create_technology_advisor(llm,
         """,
 
         agent=technology_advisor_agent,
-
-        output_pydantic=TechnologyRecommendation
+        output_pydantic=TechnologyRecommendation,
+        context=context or []
     )
 
 

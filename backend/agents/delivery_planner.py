@@ -1,13 +1,9 @@
 from crewai import Agent, Task
 
-from app.models.delivery_planner import DeliveryPlan
+from backend.models.delivery_planner import DeliveryPlan
 
 
-def create_delivery_planner(llm, 
-        business_analysis, 
-        architecture, 
-        technology_advice
-    ):
+def create_delivery_planner(llm, context=None):
 
     delivery_planner_agent = Agent(
         role="Delivery Planner and Project Execution Specialist",
@@ -34,22 +30,11 @@ def create_delivery_planner(llm,
     )
 
     delivery_planner_task = Task(
-        description=f"""
+        description="""
             You are the final Delivery Planner Agent in a multi-agent
             AI solution consulting system.
 
-            Use the following outputs from the previous agents.
-
-            ================ BUSINESS ANALYST OUTPUT ================
-            {business_analysis}
-
-            ================ SOLUTION ARCHITECT OUTPUT ================
-            {architecture}
-
-            ================ TECHNOLOGY ADVISOR OUTPUT ================
-            {technology_advice}
-
-            =========================================================
+            Use the outputs provided in the context from the previous agents (Business Analyst, Solution Architect, and Technology Advisor).
 
             Create a complete and realistic delivery plan for the proposed
             software solution.
@@ -103,7 +88,8 @@ def create_delivery_planner(llm,
         """,
 
         agent=delivery_planner_agent,
-        output_pydantic=DeliveryPlan
+        output_pydantic=DeliveryPlan,
+        context=context or []
     )
 
     return delivery_planner_agent, delivery_planner_task

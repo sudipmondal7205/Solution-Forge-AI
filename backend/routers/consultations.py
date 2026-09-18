@@ -10,6 +10,7 @@ Auth: every request needs  Authorization: Bearer <token>  from /auth/login.
 """
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import StreamingResponse
 
 from ..core.security import decode_access_token
 from ..db.database import (
@@ -19,7 +20,7 @@ from ..db.database import (
     complete_consultation,
 )
 from ..models.user_input import UserInput
-from ..services.crew_service import run_consultation
+from ..services.crew_service import start_consultation_stream
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
@@ -36,27 +37,26 @@ def get_current_user_id(authorization: str = Header(default="")) -> str:
     return payload["sub"]
 
 
-@router.post("", status_code=201)
+@router.post("")
 def start_consultation(
     payload: UserInput,
-    user_id: str = Depends(get_current_user_id),
+    # user_id: str = Depends(get_current_user_id),
 ):
-    """Save the user input, run the whole agent pipeline, store every output."""
-    # 1) Save the consultation as in_progress (empty agent outputs).
-    consultation = create_consultation(user_id, payload.model_dump(mode="json"))
+    """Save the user input, start CrewAI, and stream agent outputs live."""
+    
+    # 1) Save the consultation in MongoDB as 'in_progress'
+    # consultation = create_consultation(user_id, payload.model_dump(mode="json"))
+    # 2) Get the stream generator from our service layer
+    event_generator = start_consultation_stream(
+        # consultation_id=str(consultation.id),
+        user_input=payload.model_dump(mode="json")
+    )
+    # 3) Return the Server-Sent Events stream
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream"
+    )
 
-    # 2) Run the CrewAI pipeline; each agent output is saved to MongoDB.
-    def on_agent_done(agent_key: str, output: dict):
-        print(f"  [progress] {agent_key} -> saved ({len(str(output))} chars)")
-
-    run_consultation(consultation.id, payload.model_dump(mode="json"), progress=on_agent_done)
-
-    # 3) Mark completed. (judge + blueprint_html filled in a later phase)
-    complete_consultation(consultation.id, None, None)
-
-    from ..models.consultation import Consultation
-    doc = get_consultation_by_id(consultation.id)
-    return Consultation.from_doc(doc).model_dump(mode="json")
 
 
 @router.get("")

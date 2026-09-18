@@ -1,5 +1,5 @@
 from crewai import Agent, Task
-from app.models.business_analyst import BusinessAnalysis
+from backend.models.business_analyst import BusinessAnalysis
 
 
 

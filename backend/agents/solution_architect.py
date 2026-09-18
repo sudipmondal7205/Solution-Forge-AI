@@ -1,8 +1,8 @@
 from crewai import Agent, Task
-from app.models.solution_architecture import SolutionArchitecture
+from backend.models.solution_architecture import SolutionArchitecture
 
 
-def create_solution_architect(llm, user_input, business_analysis):
+def create_solution_architect(llm, user_input, context=None):
 
     solution_architect_agent = Agent(
         role="Solution Architect",
@@ -26,14 +26,11 @@ def create_solution_architect(llm, user_input, business_analysis):
 
     solution_architecture_task = Task(
         description=f"""
-            Analyze the user constraints and business requirements to
+            Analyze the user constraints and business requirements from the Business Analyst to
             design a complete system architecture.
 
             === USER INPUT ===
             {user_input}
-
-            === BUSINESS ANALYSIS ===
-            {business_analysis}
 
             Design the system architecture considering the MVP scope,
             expected traffic, timeline, and cloud preferences.
@@ -73,7 +70,8 @@ def create_solution_architect(llm, user_input, business_analysis):
         ),
 
         agent=solution_architect_agent,
-        output_pydantic=SolutionArchitecture
+        output_pydantic=SolutionArchitecture,
+        context=context or []
     )
 
     return solution_architect_agent, solution_architecture_task

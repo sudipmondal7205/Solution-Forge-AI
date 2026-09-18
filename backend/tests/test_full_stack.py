@@ -11,15 +11,9 @@ Run from the repo root:
     python -m backend.tests.test_full_stack
 """
 
-import sys
-import os
 import time
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-from backend.main import app  # noqa: E402
+from fastapi.testclient import TestClient
+from backend.main import app
 
 client = TestClient(app)
 

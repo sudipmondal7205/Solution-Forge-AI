@@ -1,32 +1,18 @@
-"""
-Crew service — the bridge between FastAPI and the CrewAI agentic workflow.
+import json
+import queue
+import threading
 
-Flow:
-  consultation created  ->  crew runs (BA -> SA -> TA -> DP)  ->  each agent's
-  output is saved into the consultation document in MongoDB.
+import crewai.llms.cache as _crewai_cache
+from backend.db.database import complete_consultation, update_agent_output
+from backend.models.user_input import UserInput as CrewUserInput
+from backend.services.orchestration import create_solution_crew
+from backend.core.llm import llm
 
-This module imports the existing CrewAI pipeline from the repo's `app/` folder
-(untouched). It is the single place the backend talks to the agents.
-"""
 
-import os
-import sys
-from typing import Callable, Optional
-
-# Make the repo root importable so we can `import app.*` (CrewAI pipeline).
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
-
-# Workaround for crewai issue #5886: CrewAI injects a `cache_breakpoint` flag
-# into every message for NON-Anthropic providers (e.g. Cohere), which Cohere's
-# API rejects. This no-op patch prevents the injection before it reaches Cohere.
-import crewai.llms.cache as _crewai_cache  # noqa: E402
 _crewai_cache.mark_cache_breakpoint = lambda message: message
 
-from ..db.database import update_agent_output  # noqa: E402
 
-# Order of agents in the CrewAI pipeline.
+
 AGENT_KEYS = [
     "business_analysis",
     "solution_architecture",
@@ -50,53 +36,61 @@ def _output_to_dict(task_output) -> dict:
     return {"raw": raw}
 
 
-def _get_llm():
-    """Load the shared LLM (Cohere) once, lazily."""
-    from dotenv import load_dotenv
-    load_dotenv(override=True)
-    from app.config.llm import llm
 
-    # Cohere's API rejects CrewAI's "native tool calling" payloads (it sends a
-    # `strict` field Cohere does not accept). Fall back to classic ReAct-style
-    # tool calling, which works with Cohere.
-    llm.supports_function_calling = lambda: False
-
-    return llm
-
-
-def run_consultation(
-    consultation_id: str,
-    user_input: dict,
-    progress: Optional[Callable[[str, dict], None]] = None,
-) -> dict:
+def start_consultation_stream(consultation_id: None, user_input: dict):
     """
-    Run the full CrewAI pipeline for one consultation and save every agent
-    output into MongoDB.
-
-    - consultation_id : Mongo document _id of the consultation
-    - user_input      : validated dict of the 6 user-input fields
-    - progress        : optional callback(key, output_dict) called after each
-                        agent finishes (used to stream progress to the UI)
+    Starts the CrewAI process in a background thread and returns a generator
+    that yields Server-Sent Events (SSE) as each agent finishes.
     """
-    from app.models.user_input import UserInput as CrewUserInput
-    from app.orchestration import create_solution_crew
+    message_queue = queue.Queue()
+    
+    state = {"task_index": 0}
+    def on_task_completed(task_output):
+        """This callback fires every time one agent finishes its task."""
+        idx = state["task_index"]
+        if idx < len(AGENT_KEYS):
+            agent_key = AGENT_KEYS[idx]
+            data = _output_to_dict(task_output)
+            
+            # update_agent_output(consultation_id, agent_key, data)
+            
+            message_queue.put({
+                "event": "agent_finished",
+                "agent": agent_key,
+                "data": data
+            })
+            state["task_index"] += 1
 
-    llm = _get_llm()
-    crew_input = CrewUserInput(**user_input)
+    def run_crew():
+        """The blocking function that runs in the background thread."""
+        try:
+            crew_input = CrewUserInput(**user_input)
+            crew = create_solution_crew(llm, crew_input)
+            
+            for task in crew.tasks:
+                task.callback = on_task_completed
 
-    crew = create_solution_crew(llm, crew_input)
-    result = crew.kickoff()
-
-    tasks_output = list(result.tasks_output or [])
-    saved: dict[str, dict] = {}
-
-    for i, agent_key in enumerate(AGENT_KEYS):
-        if i >= len(tasks_output):
-            break
-        data = _output_to_dict(tasks_output[i])
-        update_agent_output(consultation_id, agent_key, data)
-        saved[agent_key] = data
-        if progress:
-            progress(agent_key, data)
-
-    return {"agent_outputs": saved, "final_result": str(result)}
+            crew.kickoff()
+            
+            # complete_consultation(consultation_id, None, None)
+            
+            message_queue.put({
+                "event": "complete",
+                "message": "All agents finished successfully."
+            })
+        except Exception as e:
+            message_queue.put({
+                "event": "error",
+                "message": str(e)
+            })
+        finally:
+            message_queue.put(None) 
+    threading.Thread(target=run_crew).start()
+    def event_generator():
+        while True:
+            msg = message_queue.get()
+            if msg is None:
+                break
+            
+            yield f"data: {json.dumps(msg)}\n\n"
+    return event_generator

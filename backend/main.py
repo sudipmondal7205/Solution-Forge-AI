@@ -8,9 +8,8 @@ so we can verify DB connectivity easily.
 """
 
 from fastapi import FastAPI
-
-from .db.database import db
-from .routers import auth, consultations
+from backend.db.database import db
+from backend.routers import auth, consultations
 
 app = FastAPI(
     title="SolutionForgeAI API",
@@ -18,7 +17,6 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# Include route modules. Each has its own prefix/tags.
 app.include_router(auth.router)
 app.include_router(consultations.router)
 
