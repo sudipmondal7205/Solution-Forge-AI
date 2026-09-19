@@ -180,10 +180,11 @@ class ConsultationResult:
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "ConsultationResult":
         d = d or {}
+        agent_outputs = d.get("agent_outputs") or d
         return ConsultationResult(
-            business_analysis=BusinessAnalysis.from_dict(d.get("business_analysis", {})),
-            solution_architecture=SolutionArchitecture.from_dict(d.get("solution_architecture", {})),
-            technology_recommendation=TechnologyRecommendation.from_dict(d.get("technology_recommendation", {})),
-            delivery_plan=DeliveryPlan.from_dict(d.get("delivery_plan", {})),
+            business_analysis=BusinessAnalysis.from_dict(agent_outputs.get("business_analysis", {})),
+            solution_architecture=SolutionArchitecture.from_dict(agent_outputs.get("solution_architecture", {})),
+            technology_recommendation=TechnologyRecommendation.from_dict(agent_outputs.get("technology_recommendation", {})),
+            delivery_plan=DeliveryPlan.from_dict(agent_outputs.get("delivery_plan", {})),
             user_input=d.get("user_input", {}),
         )

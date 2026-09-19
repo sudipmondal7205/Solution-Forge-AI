@@ -53,13 +53,32 @@ def _render_history_row(entry: dict) -> None:
         st.markdown(f'<span class="sf-badge {badge_class}">{status_label}</span>', unsafe_allow_html=True)
     with col_view:
         st.write("")
-        if st.button("View Blueprint", key=f"view_{entry.get('consultation_id')}", use_container_width=True):
-            st.session_state["viewing_consultation_id"] = entry.get("consultation_id")
+        cid = entry.get("id") or entry.get("consultation_id")
+        if st.button("View Blueprint", key=f"view_{cid}", use_container_width=True):
+            st.session_state["viewing_consultation_id"] = cid
             ss.go_to("live_results")
             st.rerun()
     with col_export:
         st.write("")
-        if st.button("Export PDF", key=f"export_{entry.get('consultation_id')}", use_container_width=True):
-            st.info("PDF export will be available once the backend export endpoint is connected.")
+        cid = entry.get("id") or entry.get("consultation_id")
+        dl_key = f"html_export_{cid}"
+        
+        if dl_key in st.session_state:
+            st.download_button(
+                label="📥 Download",
+                data=st.session_state[dl_key],
+                file_name=f"blueprint_{str(cid)[:8]}.html",
+                mime="text/html",
+                use_container_width=True,
+                key=f"dl_btn_{cid}"
+            )
+        else:
+            if st.button("Export HTML", key=f"export_{cid}", use_container_width=True):
+                try:
+                    html_content = api_client.export_blueprint_html(st.session_state["auth_token"], cid)
+                    st.session_state[dl_key] = html_content
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to fetch blueprint: {e}")
 
     st.markdown("</div>", unsafe_allow_html=True)

@@ -17,7 +17,6 @@ from styles import logo_data_uri
 NAV_ITEMS = [
     {"key": "new_consultation", "label": "🔍  New Consultation"},
     {"key": "chat_history", "label": "📄  Chat History"},
-    {"key": "live_results", "label": "📈  Live Results"},
     {"key": "help", "label": "❓  Help & Support"},
 ]
 

@@ -1,23 +1,12 @@
 """
 views/live_results_view.py
 ===========================
-"Live Results" page — matches the mockup: a Consultation Details card, a
-row of 4 agent-status pills (Business Analyst -> Solution Architect ->
-Technology Advisor -> Delivery Planner) that clearly shows which agent is
-currently running, which are done, and which are still waiting, followed
-by a one-line summary banner + download button once complete, then the
-full blueprint broken into sections.
+"Live Results" page — now used exclusively for viewing past/completed
+consultations from chat history.
 
-Polling strategy
------------------
-While overall_status == "processing", this page polls
-GET /consultations/{id}/status every config.STATUS_POLL_INTERVAL_SECONDS
-seconds using a short sleep + st.rerun() loop (the standard Streamlit
-pattern for live-updating pages). A manual "Refresh now" button is also
-provided so the user isn't purely dependent on auto-refresh.
+Live streaming of new consultations is handled inline in
+consultation_view.py via SSE.
 """
-
-import time
 
 import streamlit as st
 
@@ -37,35 +26,7 @@ def render() -> None:
                  "or open a past one from **Chat History**.")
         return
 
-    _render_consultation_details_card()
-
-    try:
-        status_payload = api_client.get_consultation_status(
-            token=st.session_state["auth_token"], consultation_id=consultation_id,
-        )
-    except ApiError as err:
-        st.error(str(err))
-        return
-
-    agents_status = status_payload.get("agents", {})
-    overall_status = status_payload.get("overall_status", "processing")
-
-    _render_agent_pipeline(agents_status)
-
-    if overall_status == "failed":
-        st.error("The consultation failed while running. Please try again or contact support.")
-        return
-
-    if overall_status != "completed":
-        st.caption("Multi-agent context is being passed sequentially for blueprint creation.")
-        col_refresh, _ = st.columns([1, 3])
-        with col_refresh:
-            st.button("🔄 Refresh now", key="live_results_refresh")
-        time.sleep(config.STATUS_POLL_INTERVAL_SECONDS)
-        st.rerun()
-        return
-
-    # overall_status == "completed" -> fetch full result and render blueprint
+    # Fetch the full consultation from the backend
     try:
         result_payload = api_client.get_consultation_result(
             token=st.session_state["auth_token"], consultation_id=consultation_id,
@@ -75,14 +36,22 @@ def render() -> None:
         return
 
     result = ConsultationResult.from_dict(result_payload)
+    _render_consultation_details_card(result_payload.get("user_input", {}))
+
+    # Check if it's still in progress
+    agent_outputs = result_payload.get("agent_outputs", {})
+    if not agent_outputs or all(v is None for v in agent_outputs.values()):
+        st.warning("This consultation is still processing. Results will appear once agents finish.")
+        return
+
+    _render_agent_pipeline_done(agent_outputs)
     _render_ready_banner(consultation_id, result_payload)
     _render_summary_section(result)
     st.markdown("---")
     _render_full_blueprint(result)
 
 
-def _render_consultation_details_card() -> None:
-    summary = st.session_state.get("consultation_summary") or {}
+def _render_consultation_details_card(summary: dict) -> None:
     if not summary:
         return
     st.markdown('<div class="sf-card">', unsafe_allow_html=True)
@@ -98,17 +67,14 @@ def _render_consultation_details_card() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def _render_agent_pipeline(agents_status: dict) -> None:
+def _render_agent_pipeline_done(agent_outputs: dict) -> None:
+    """Show all 4 agent pills as done (for a completed consultation)."""
     cols = st.columns(len(config.AGENT_PIPELINE))
     for idx, (col, agent) in enumerate(zip(cols, config.AGENT_PIPELINE), start=1):
-        status = agents_status.get(agent["key"], "pending")
+        has_output = agent_outputs.get(agent["key"]) is not None
+        status = "done" if has_output else "pending"
         css_class = styles.agent_status_class(status)
-        sub_label = {
-            "done": "Done ✔",
-            "in_progress": "Working now…",
-            "pending": "Waiting",
-            "error": "Error",
-        }.get(status, "Waiting")
+        sub_label = "Done ✔" if has_output else "Waiting"
         with col:
             st.markdown(
                 f"""<div class="sf-agent-pill {css_class}">
@@ -154,10 +120,10 @@ def _render_summary_section(result: ConsultationResult) -> None:
         tech_count = len(result.technology_recommendation.technologies)
         st.metric("Technologies Selected", tech_count)
     with c3:
-        team_size = sum(role.get("count", 0) for role in result.delivery_plan.team_roles)
+        team_size = sum(role.get("count", 0) if isinstance(role, dict) else 0 for role in result.delivery_plan.team_roles)
         st.metric("Recommended Team Size", team_size)
     with c4:
-        total_weeks = sum(phase.get("duration_weeks", 0) for phase in result.delivery_plan.timeline)
+        total_weeks = sum(phase.get("duration_weeks", 0) if isinstance(phase, dict) else 0 for phase in result.delivery_plan.timeline)
         st.metric("Estimated Duration", f"{total_weeks} weeks")
 
     if result.business_analysis.problem_statement:
@@ -188,10 +154,12 @@ def _render_delivery_overview(result: ConsultationResult) -> None:
     if dp.deployment_strategy:
         st.caption(dp.deployment_strategy)
     if dp.timeline:
-        rows = "".join(
-            f"<tr><td>{p.get('phase','')}</td><td>{p.get('duration_weeks','')} wks</td></tr>"
-            for p in dp.timeline
-        )
+        rows = ""
+        for p in dp.timeline:
+            if isinstance(p, dict):
+                rows += f"<tr><td>{p.get('phase','')}</td><td>{p.get('duration_weeks','')} wks</td></tr>"
+            else:
+                rows += f"<tr><td colspan='2'>{p}</td></tr>"
         st.markdown(
             f"""<table style="width:100%; font-size:0.9rem;">
                     <tr><th align="left">Phase</th><th align="left">Duration</th></tr>
@@ -210,7 +178,10 @@ def _render_recommended_stack(result: ConsultationResult) -> None:
         st.caption("No technology recommendations yet.")
         return
     for tech in technologies:
-        st.markdown(f"- **{tech.get('technology','')}** ({tech.get('category','')})")
+        if isinstance(tech, dict):
+            st.markdown(f"- **{tech.get('technology','')}** ({tech.get('category','')})")
+        else:
+            st.markdown(f"- {tech}")
 
 
 def _render_implementation_workstreams(result: ConsultationResult) -> None:
@@ -220,15 +191,21 @@ def _render_implementation_workstreams(result: ConsultationResult) -> None:
         st.caption("No workstreams returned yet.")
         return
     for ws in workstreams:
-        tasks = ", ".join(ws.get("tasks", []))
-        st.markdown(f"- **{ws.get('name','')}**: {tasks}")
+        if isinstance(ws, dict):
+            tasks = ", ".join(ws.get("tasks", []))
+            st.markdown(f"- **{ws.get('name','')}**: {tasks}")
+        else:
+            st.markdown(f"- {ws}")
 
 
 def _render_technology_detail(result: ConsultationResult) -> None:
     st.markdown("**Technology Rationale**")
     for tech in result.technology_recommendation.technologies:
-        with st.expander(f"{tech.get('technology','')} — {tech.get('category','')}"):
-            st.write(tech.get("reason", "No rationale provided."))
+        if isinstance(tech, dict):
+            with st.expander(f"{tech.get('technology','')} — {tech.get('category','')}"):
+                st.write(tech.get("reason", "No rationale provided."))
+        else:
+            st.markdown(f"- {tech}")
 
     cloud = result.technology_recommendation.cloud
     if cloud:
@@ -242,7 +219,10 @@ def _render_team_roles(result: ConsultationResult) -> None:
         st.caption("No team roles returned yet.")
         return
     for role in roles:
-        st.markdown(f"- {role.get('count','?')} x {role.get('role','')}")
+        if isinstance(role, dict):
+            st.markdown(f"- {role.get('count','?')} x {role.get('role','')}")
+        else:
+            st.markdown(f"- {role}")
 
 
 def _render_timeline_milestones(result: ConsultationResult) -> None:
@@ -262,7 +242,10 @@ def _render_risks(result: ConsultationResult) -> None:
         st.caption("No risks returned yet.")
         return
     for r in risks:
-        st.markdown(f"- **{r.get('risk','')}** ({r.get('impact','')}) — _{r.get('mitigation','')}_")
+        if isinstance(r, dict):
+            st.markdown(f"- **{r.get('risk','')}** ({r.get('impact','')}) — _{r.get('mitigation','')}_")
+        else:
+            st.markdown(f"- {r}")
 
 
 def _render_future_evolution(result: ConsultationResult) -> None:

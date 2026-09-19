@@ -12,10 +12,9 @@ codebase calls `requests` directly. This means:
     and display via st.error(). Never leak raw exceptions to the UI.
 """
 
-from typing import List, Optional
-
+import json
+from typing import Generator, List, Optional
 import requests
-
 import config
 import mock_data
 
@@ -73,13 +72,16 @@ def login(email: str, password: str) -> dict:
     try:
         resp = requests.post(
             f"{config.API_BASE_URL}/auth/login",
-            json={"email": email, "password": password},
+            json={"identifier": email, "password": password},
             headers=_headers(),
             timeout=config.REQUEST_TIMEOUT,
         )
     except requests.RequestException as exc:
         raise ApiError(f"Could not reach the server: {exc}") from exc
-    return _handle_response(resp)
+    payload = _handle_response(resp)
+    if "token" in payload and "access_token" not in payload:
+        payload["access_token"] = payload.pop("token")
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +104,67 @@ def create_consultation(token: str, user_input: dict) -> dict:
     return _handle_response(resp)
 
 
+def stream_consultation(token: str, user_input: dict) -> Generator[dict, None, None]:
+    """
+    POST /consultations  (streaming mode)
+
+    Opens the SSE stream and yields parsed event dicts as they arrive:
+        {"event": "agent_finished", "agent": "<key>", "data": {...}}
+        {"event": "complete", "message": "..."}
+        {"event": "error", "message": "..."}
+    """
+    if config.USE_MOCK_DATA:
+        # Fall back to mock: simulate the 4 agents finishing one by one.
+        import time
+        mock_agents = [
+            "business_analysis",
+            "solution_architecture",
+            "technology_recommendation",
+            "delivery_plan",
+        ]
+        consultation_id = mock_data.start_mock_consultation(user_input)
+        result = mock_data.get_mock_result(consultation_id)
+        for key in mock_agents:
+            time.sleep(2)
+            yield {"event": "agent_finished", "agent": key, "data": result.get(key, {})}
+        yield {"event": "complete", "message": "All agents finished successfully."}
+        return
+
+    try:
+        resp = requests.post(
+            f"{config.API_BASE_URL}/consultations",
+            json=user_input,
+            headers=_headers(token),
+            timeout=None,  # long-running stream, no timeout
+            stream=True,
+        )
+    except requests.RequestException as exc:
+        raise ApiError(f"Could not reach the server: {exc}") from exc
+
+    if not resp.ok:
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = {}
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        raise ApiError(detail or f"Request failed with status {resp.status_code}.")
+
+    # Parse the SSE stream line by line
+    for line in resp.iter_lines(decode_unicode=True):
+        if not line:
+            continue
+        # SSE format: "data: {json}"
+        if line.startswith("data: "):
+            raw = line[len("data: "):]
+            try:
+                event = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            yield event
+            if event.get("event") in ("complete", "error"):
+                break
+
+
 def get_consultation_status(token: str, consultation_id: str) -> dict:
     """GET /consultations/{id}/status -> {"overall_status": str, "agents": {...}}"""
     if config.USE_MOCK_DATA:
@@ -118,12 +181,12 @@ def get_consultation_status(token: str, consultation_id: str) -> dict:
 
 
 def get_consultation_result(token: str, consultation_id: str) -> dict:
-    """GET /consultations/{id}/result -> combined agent outputs (see models.py)"""
+    """GET /consultations/{id} -> full consultation with agent outputs (see models.py)"""
     if config.USE_MOCK_DATA:
         return mock_data.get_mock_result(consultation_id)
     try:
         resp = requests.get(
-            f"{config.API_BASE_URL}/consultations/{consultation_id}/result",
+            f"{config.API_BASE_URL}/consultations/{consultation_id}",
             headers=_headers(token),
             timeout=config.REQUEST_TIMEOUT,
         )
@@ -159,8 +222,7 @@ def export_blueprint_html(token: str, consultation_id: str) -> str:
         return _render_fallback_html(result)
     try:
         resp = requests.get(
-            f"{config.API_BASE_URL}/consultations/{consultation_id}/export",
-            params={"format": "html"},
+            f"{config.API_BASE_URL}/consultations/{consultation_id}/blueprint",
             headers=_headers(token),
             timeout=config.REQUEST_TIMEOUT,
         )
