@@ -383,6 +383,20 @@ def render_delivery(dp: Optional[dict]) -> str:
     )
     parts.append(section_card("Implementation Workstreams", bullet_list(dp.get("workstreams")), "🧵"))
     parts.append(section_card("Timeline & Milestones", bullet_list(dp.get("timeline")), "🗓️"))
+    parts.append(
+        "<div class='grid-2'>"
+        + section_card(
+            "Effort Assessment",
+            bullet_list(dp.get("effort_assessment"), "Not estimated."),
+            "⏱️",
+        )
+        + section_card(
+            "Complexity Assessment",
+            bullet_list(dp.get("complexity_assessment"), "Not assessed."),
+            "🧠",
+        )
+        + "</div>"
+    )
     parts.append(section_card("Recommended Team & Roles", bullet_list(dp.get("team")), "👥"))
     parts.append(section_card("Dependencies", bullet_list(dp.get("dependencies")), "🔗"))
     parts.append(section_card("Delivery Risks", bullet_list(dp.get("risks")), "⚠️"))

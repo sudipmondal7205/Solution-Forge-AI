@@ -54,6 +54,8 @@ def create_delivery_planner(llm, context=None):
             11. Deployment plan
             12. Maintenance and future evolution
             13. Assumptions and open questions
+            14. Effort & complexity assessment for the overall solution
+                and for each major workstream / phase
 
             Important rules:
 
@@ -83,7 +85,15 @@ def create_delivery_planner(llm, context=None):
                 "deployment_plan": [],
                 "maintenance_plan": [],
                 "assumptions": [],
-                "open_questions": []
+                "open_questions": [],
+                "effort_assessment": [
+                    "Estimated effort (person-days / sprints / story points) "
+                    "per major workstream or phase"
+                ],
+                "complexity_assessment": [
+                    "Overall complexity rating (Low / Medium / High) and the "
+                    "rating per workstream, with the reasoning"
+                ]
             }
         """,
 
