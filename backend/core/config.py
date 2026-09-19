@@ -14,12 +14,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    MONGO_URI: str = "mongodb://localhost:27017"
-    MONGO_DB: str = "solutionforge"
+    MONGO_URI: str
+    MONGO_DB: str
 
-    JWT_SECRET: str = "dev-secret-change-me"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRY_MINUTES: int = 720
+    JWT_SECRET: str
+    JWT_ALGORITHM: str
+    JWT_EXPIRY_MINUTES: int
 
     SERPER_API_KEY: str
     COHERE_API_KEY: str

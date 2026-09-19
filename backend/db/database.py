@@ -8,10 +8,9 @@ Helper functions give the rest of the app a clean API:
 """
 
 from datetime import datetime, timezone
-
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
-
+from bson import ObjectId
 from ..core.config import settings
 from ..models.user import UserCreate, User
 from ..models.consultation import ConsultationCreate, Consultation
@@ -102,8 +101,6 @@ def get_consultations_for_user(user_id: str) -> list[dict]:
 
 def update_agent_output(consultation_id: str, agent_key: str, output: dict):
     """Store one agent's output into the consultation doc."""
-    from bson import ObjectId
-
     consultations_collection.update_one(
         {"_id": ObjectId(consultation_id)},
         {"$set": {f"agent_outputs.{agent_key}": output}},
@@ -112,8 +109,6 @@ def update_agent_output(consultation_id: str, agent_key: str, output: dict):
 
 def complete_consultation(consultation_id: str, judge_output: dict, blueprint_html: str):
     """Mark consultation as completed with judge result + blueprint."""
-    from bson import ObjectId
-
     consultations_collection.update_one(
         {"_id": ObjectId(consultation_id)},
         {
@@ -128,6 +123,4 @@ def complete_consultation(consultation_id: str, judge_output: dict, blueprint_ht
 
 def get_consultation_by_id(consultation_id: str):
     """Return a single consultation document, or None."""
-    from bson import ObjectId
-
     return consultations_collection.find_one({"_id": ObjectId(consultation_id)})

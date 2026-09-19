@@ -21,6 +21,7 @@ app.include_router(auth.router)
 app.include_router(consultations.router)
 
 
+
 @app.get("/health")
 def health_check():
     """Quick check that the API + MongoDB are reachable."""

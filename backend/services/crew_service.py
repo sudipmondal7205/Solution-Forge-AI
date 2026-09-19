@@ -1,7 +1,6 @@
 import json
 import queue
 import threading
-
 import crewai.llms.cache as _crewai_cache
 from backend.db.database import complete_consultation, update_agent_output
 from backend.models.user_input import UserInput as CrewUserInput
@@ -37,7 +36,7 @@ def _output_to_dict(task_output) -> dict:
 
 
 
-def start_consultation_stream(consultation_id: None, user_input: dict):
+def start_consultation_stream(consultation_id: str, user_input: dict):
     """
     Starts the CrewAI process in a background thread and returns a generator
     that yields Server-Sent Events (SSE) as each agent finishes.
@@ -52,7 +51,7 @@ def start_consultation_stream(consultation_id: None, user_input: dict):
             agent_key = AGENT_KEYS[idx]
             data = _output_to_dict(task_output)
             
-            # update_agent_output(consultation_id, agent_key, data)
+            update_agent_output(consultation_id, agent_key, data)
             
             message_queue.put({
                 "event": "agent_finished",
@@ -72,7 +71,7 @@ def start_consultation_stream(consultation_id: None, user_input: dict):
 
             crew.kickoff()
             
-            # complete_consultation(consultation_id, None, None)
+            complete_consultation(consultation_id, None, None)
             
             message_queue.put({
                 "event": "complete",

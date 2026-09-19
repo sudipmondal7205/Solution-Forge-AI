@@ -28,10 +28,10 @@ class Consultation(BaseModel):
     user_id: str
     timestamp: datetime
     user_input: dict[str, Any]
-    agent_outputs: dict[str, Optional[Any]]  # BA, SA, TA, DP outputs
+    agent_outputs: dict[str, Optional[Any]]
     judge_output: Optional[Any]
     blueprint_html: Optional[str]
-    status: str  # "in_progress" | "completed"
+    status: str
 
     @classmethod
     def from_doc(cls, doc: dict) -> "Consultation":

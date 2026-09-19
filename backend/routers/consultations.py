@@ -10,8 +10,8 @@ Auth: every request needs  Authorization: Bearer <token>  from /auth/login.
 """
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from fastapi.responses import StreamingResponse
-
+from fastapi.responses import StreamingResponse, HTMLResponse
+from ..services.blueprint_generator import get_blueprint_html
 from ..core.security import decode_access_token
 from ..db.database import (
     create_consultation,
@@ -40,15 +40,15 @@ def get_current_user_id(authorization: str = Header(default="")) -> str:
 @router.post("")
 def start_consultation(
     payload: UserInput,
-    # user_id: str = Depends(get_current_user_id),
+    user_id: str = Depends(get_current_user_id),
 ):
     """Save the user input, start CrewAI, and stream agent outputs live."""
     
     # 1) Save the consultation in MongoDB as 'in_progress'
-    # consultation = create_consultation(user_id, payload.model_dump(mode="json"))
+    consultation = create_consultation(user_id, payload.model_dump(mode="json"))
     # 2) Get the stream generator from our service layer
     event_generator = start_consultation_stream(
-        # consultation_id=str(consultation.id),
+        consultation_id=str(consultation.id),
         user_input=payload.model_dump(mode="json")
     )
     # 3) Return the Server-Sent Events stream
@@ -81,3 +81,18 @@ def get_consultation(
 
     from ..models.consultation import Consultation
     return Consultation.from_doc(doc).model_dump(mode="json")
+
+
+@router.get("/{consultation_id}/blueprint", response_class=HTMLResponse)
+def get_consultation_blueprint(
+    consultation_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return the standalone HTML blueprint for a consultation."""
+    try:
+        html = get_blueprint_html(consultation_id, user_id)
+        if not html:
+            raise HTTPException(status_code=404, detail="Consultation not found.")
+        return html
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
