@@ -68,30 +68,17 @@ def render() -> None:
 def _render_brand_panel() -> None:
     icon = logo_data_uri(icon_only=True)
     icon_html = f'<img class="sf-auth-icon" src="{icon}" alt="SolutionForge AI" />' if icon else ""
-    st.markdown(
-        f"""
-        <div class="sf-auth-brand">
-            {icon_html}
-            <div class="sf-auth-brand-name">SolutionForge AI</div>
-            <div class="sf-auth-brand-tagline">
-                Turn a business idea into a complete, delivery-ready solution blueprint.
-            </div>
-            <div class="sf-auth-feature">
-                <span class="sf-dot">🧠</span>
-                <span>Four AI agents cover business analysis, architecture, tech and delivery planning</span>
-            </div>
-            <div class="sf-auth-feature">
-                <span class="sf-dot">⚡</span>
-                <span>A full blueprint in minutes, not weeks</span>
-            </div>
-            <div class="sf-auth-feature">
-                <span class="sf-dot">📄</span>
-                <span>Exportable, shareable delivery plans</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    html_content = (
+        '<div class="sf-auth-brand">'
+        f'{icon_html}'
+        '<div class="sf-auth-brand-name">SolutionForge AI</div>'
+        '<div class="sf-auth-brand-tagline">Turn a business idea into a complete, delivery-ready solution blueprint.</div>'
+        '<div class="sf-auth-feature"><span class="sf-dot">🧠</span><span>Four AI agents cover business analysis, architecture, tech and delivery planning</span></div>'
+        '<div class="sf-auth-feature"><span class="sf-dot">⚡</span><span>A full blueprint in minutes, not weeks</span></div>'
+        '<div class="sf-auth-feature"><span class="sf-dot">📄</span><span>Exportable, shareable delivery plans</span></div>'
+        '</div>'
     )
+    st.markdown(html_content, unsafe_allow_html=True)
 
 
 def _render_auth_toggle() -> None:

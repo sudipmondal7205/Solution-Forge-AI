@@ -56,6 +56,7 @@ def start_consultation_stream(consultation_id: str, user_input: dict):
             message_queue.put({
                 "event": "agent_finished",
                 "agent": agent_key,
+                "consultation_id": consultation_id,
                 "data": data
             })
             state["task_index"] += 1
@@ -75,11 +76,13 @@ def start_consultation_stream(consultation_id: str, user_input: dict):
             
             message_queue.put({
                 "event": "complete",
+                "consultation_id": consultation_id,
                 "message": "All agents finished successfully."
             })
         except Exception as e:
             message_queue.put({
                 "event": "error",
+                "consultation_id": consultation_id,
                 "message": str(e)
             })
         finally:

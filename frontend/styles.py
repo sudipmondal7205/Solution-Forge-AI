@@ -281,6 +281,22 @@ GLOBAL_CSS = """
         color: var(--sf-text) !important;
         background-color: #ffffff !important;
     }
+    /* Fix base-web popovers (Selectbox dropdown lists) falling back to dark mode */
+    div[data-baseweb="popover"] > div, 
+    ul[data-baseweb="menu"], 
+    div[role="listbox"], 
+    ul[role="listbox"] {
+        background-color: #ffffff !important;
+    }
+    li[role="option"], ul[data-baseweb="menu"] li {
+        color: var(--sf-text) !important;
+        background-color: #ffffff !important;
+    }
+    li[role="option"]:hover, li[role="option"][aria-selected="true"],
+    ul[data-baseweb="menu"] li:hover, ul[data-baseweb="menu"] li[aria-selected="true"] {
+        background-color: var(--sf-blue-light) !important;
+        color: var(--sf-navy) !important;
+    }
     .stTextInput input:focus, .stTextArea textarea:focus {
         border-color: var(--sf-blue) !important;
         box-shadow: 0 0 0 3px rgba(29,95,184,0.12) !important;

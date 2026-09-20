@@ -41,15 +41,23 @@ def render() -> None:
         st.session_state.consult_submitted = False
 
     if st.session_state.consult_submitted:
-        # Already submitted — show header + results directly
+        # Already submitted — show header + results directly.
+        # IMPORTANT: if the stream already finished, re-render the SAVED
+        # results instead of POSTing a brand-new consultation on every
+        # Streamlit rerun (this was creating duplicate consultations).
         col_title, col_btn = st.columns([5, 1])
         with col_title:
             styles.page_header("Live Blueprint")
         with col_btn:
             if st.button("← Back", key="new_consult_btn", use_container_width=True):
                 st.session_state.consult_submitted = False
+                st.session_state.pop("consult_results", None)
+                st.session_state.pop("active_consultation_id", None)
                 st.rerun()
-        _submit(**st.session_state.consult_form_data)
+        if st.session_state.get("consult_results"):
+            _render_saved_results()
+        else:
+            _submit(**st.session_state.consult_form_data)
         return
 
     # --- First visit or after clicking Back: show the form ---
@@ -233,6 +241,36 @@ def _submit(business_idea, technology_preference, cloud_preference,
                     "🎉 **All agents finished!** Your solution blueprint is ready. Click the tabs above to view details."
                 )
 
+                # Store the consultation id so the blueprint can be downloaded
+                consultation_id = event.get("consultation_id") or st.session_state.get("active_consultation_id")
+                if consultation_id:
+                    st.session_state["active_consultation_id"] = consultation_id
+
+                # Persist the finished results so later Streamlit reruns re-render
+                # these instead of POSTing a duplicate consultation.
+                st.session_state["consult_results"] = {
+                    "agent_results": agent_results,
+                    "agent_statuses": dict(agent_statuses),
+                    "status_label": "completed",
+                }
+
+                st.markdown("")
+                if consultation_id:
+                    try:
+                        html_report = api_client.export_blueprint_html(
+                            token=st.session_state["auth_token"],
+                            consultation_id=consultation_id,
+                        )
+                        st.download_button(
+                            "📥 Download Blueprint (HTML)",
+                            data=html_report,
+                            file_name="blueprint.html",
+                            mime="text/html",
+                            type="primary",
+                        )
+                    except ApiError as dlerr:
+                        st.warning(f"Blueprint ready, but download failed: {dlerr}")
+
             elif event_type == "error":
                 status_placeholder.error(
                     f"❌ Pipeline error: {event.get('message', 'Unknown error')}"
@@ -337,7 +375,10 @@ def _render_solution_architecture(data: dict) -> None:
 
     style = data.get("architecture_style", "")
     if style:
-        _card("🏗️ Architecture Style", f"<code style='font-size:0.9rem;'>{style}</code>")
+        _card("🏗️ Architecture Style",
+              f"<div style='font-size:0.95rem; font-weight:700; color:var(--sf-navy); "
+              f"background:var(--sf-blue-light); border:1px solid var(--sf-border); "
+              f"border-radius:10px; padding:0.7rem 1rem; display:inline-block;'>{style}</div>")
 
     c1, c2 = st.columns(2)
     comps = data.get("components", [])
@@ -412,7 +453,7 @@ def _render_delivery_plan(data: dict) -> None:
         with c1:
             _card("📅 Timeline", table)
 
-    roles = data.get("team_roles", [])
+    roles = data.get("team_roles") or data.get("team", [])
     role_items = []
     for role in roles:
         if isinstance(role, dict):
@@ -423,4 +464,52 @@ def _render_delivery_plan(data: dict) -> None:
         _card("👥 Team Roles", _list_to_html(role_items))
 
     _render_generic_remaining(data, handled)
+
+
+def _render_saved_results() -> None:
+    """Re-render a completed consultation from session state.
+
+    Called on Streamlit reruns after the pipeline already finished, so we
+    don't POST /consultations again (which used to create duplicate docs).
+    """
+    saved = st.session_state["consult_results"]
+    agent_results = saved.get("agent_results") or {}
+    agent_statuses = saved.get("agent_statuses") or {}
+    status_label = saved.get("status_label")
+
+    if status_label == "completed":
+        st.success("🎉 **All agents finished!** Your solution blueprint is ready. Click the tabs above to view details.")
+    else:
+        st.info("Consultation in progress…")
+
+    consultation_id = st.session_state.get("active_consultation_id")
+    if consultation_id:
+        st.markdown("")
+        try:
+            html_report = api_client.export_blueprint_html(
+                token=st.session_state["auth_token"],
+                consultation_id=consultation_id,
+            )
+            st.download_button(
+                "📥 Download Blueprint (HTML)",
+                data=html_report,
+                file_name="blueprint.html",
+                mime="text/html",
+                type="primary",
+            )
+        except ApiError as dlerr:
+            st.warning(f"Blueprint ready, but download failed: {dlerr}")
+
+    tabs = st.tabs([
+        "Business Analyst",
+        "Solution Architect",
+        "Technology Advisor",
+        "Delivery Planner",
+    ])
+    for idx, key in enumerate(AGENT_ORDER):
+        with tabs[idx]:
+            if key in agent_results:
+                _render_agent_output(key, agent_results[key])
+            else:
+                st.info("No output for this agent yet.")
 

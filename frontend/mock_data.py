@@ -27,29 +27,32 @@ def start_mock_consultation(user_input: dict) -> str:
     return consultation_id
 
 
-def get_mock_status(consultation_id: str) -> dict:
-    entry = _MOCK_PROGRESS.get(consultation_id)
-    if not entry:
-        return {
-            "consultation_id": consultation_id,
-            "overall_status": "failed",
-            "agents": {k: "error" for k in _AGENT_ORDER},
-        }
-
-    elapsed = time.time() - entry["started_at"]
-    completed_count = min(len(_AGENT_ORDER), int(elapsed // _SECONDS_PER_AGENT))
-
-    agents = {}
-    for i, key in enumerate(_AGENT_ORDER):
-        if i < completed_count:
-            agents[key] = "done"
-        elif i == completed_count:
-            agents[key] = "in_progress"
-        else:
-            agents[key] = "pending"
-
-    overall = "completed" if completed_count >= len(_AGENT_ORDER) else "processing"
-    return {"consultation_id": consultation_id, "overall_status": overall, "agents": agents}
+# NOTE: get_mock_status() was the mock counterpart of the removed
+# get_consultation_status() polling helper — no longer used now that the app
+# streams agent progress via SSE. Restore only if status polling returns.
+# def get_mock_status(consultation_id: str) -> dict:
+#     entry = _MOCK_PROGRESS.get(consultation_id)
+#     if not entry:
+#         return {
+#             "consultation_id": consultation_id,
+#             "overall_status": "failed",
+#             "agents": {k: "error" for k in _AGENT_ORDER},
+#         }
+#
+#     elapsed = time.time() - entry["started_at"]
+#     completed_count = min(len(_AGENT_ORDER), int(elapsed // _SECONDS_PER_AGENT))
+#
+#     agents = {}
+#     for i, key in enumerate(_AGENT_ORDER):
+#         if i < completed_count:
+#             agents[key] = "done"
+#         elif i == completed_count:
+#             agents[key] = "in_progress"
+#         else:
+#             agents[key] = "pending"
+#
+#     overall = "completed" if completed_count >= len(_AGENT_ORDER) else "processing"
+#     return {"consultation_id": consultation_id, "overall_status": overall, "agents": agents}
 
 
 def get_mock_result(consultation_id: str) -> dict:

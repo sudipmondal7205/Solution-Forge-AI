@@ -37,15 +37,35 @@ def _render_history_row(entry: dict) -> None:
         [3, 1.4, 1.4, 1.6, 1.2, 1.2]
     )
 
+    user_input = entry.get("user_input") or {}
+    business_idea = user_input.get("business_idea") or ""
+    title = entry.get("title") or (business_idea[:60] + ("…" if len(business_idea) > 60 else ""))
+    cloud_preference = entry.get("cloud_preference") or user_input.get("cloud_preference") or "—"
+
+    timestamp = entry.get("timestamp") or entry.get("date")
+    if isinstance(timestamp, str) and timestamp.endswith("Z"):
+        timestamp = timestamp[:-1] + "UTC"
+    try:
+        # MongoDB stores UTC; show it in Indian Standard Time (UTC+5:30)
+        from datetime import datetime, timedelta, timezone
+        ist_offset = timezone(timedelta(hours=5, minutes=30))
+        aware = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        if aware.tzinfo is None:
+            aware = aware.replace(tzinfo=timezone.utc)
+        ist_dt = aware.astimezone(ist_offset)
+        date_str = ist_dt.strftime("%d %b %Y, %I:%M %p")
+    except Exception:
+        date_str = str(timestamp) if timestamp else ""
+
     with col_title:
         st.markdown("**Title**")
-        st.write(entry.get("title", ""))
+        st.write(title or "Untitled")
     with col_date:
         st.markdown("**Date**")
-        st.write(entry.get("date", ""))
+        st.write(date_str)
     with col_cloud:
         st.markdown("**Cloud Preference**")
-        st.write(entry.get("cloud_preference", "—"))
+        st.write(cloud_preference)
     with col_status:
         st.markdown("**Status**")
         status_label = entry.get("status", "Processing")
@@ -67,7 +87,7 @@ def _render_history_row(entry: dict) -> None:
             st.download_button(
                 label="📥 Download",
                 data=st.session_state[dl_key],
-                file_name=f"blueprint_{str(cid)[:8]}.html",
+                file_name="blueprint.html",
                 mime="text/html",
                 use_container_width=True,
                 key=f"dl_btn_{cid}"

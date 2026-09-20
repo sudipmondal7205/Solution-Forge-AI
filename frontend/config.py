@@ -106,13 +106,14 @@ COUNTRY_OPTIONS = [
 ]
 
 # Ordered agent pipeline — used to render the 4-step progress tracker
-# on the Live Results page. Keys must match the `agents` dict returned
-# by GET /consultations/{id}/status.
+# on the Live Results page. Keys MUST match the agent_outputs keys used by
+# the backend crew (business_analysis / solution_architecture /
+# technology_recommendation / delivery_plan).
 AGENT_PIPELINE = [
-    {"key": "business_analyst", "label": "Business Analyst"},
-    {"key": "solution_architect", "label": "Solution Architect"},
-    {"key": "technology_advisor", "label": "Technology Advisor"},
-    {"key": "delivery_planner", "label": "Delivery Planner"},
+    {"key": "business_analysis", "label": "Business Analyst"},
+    {"key": "solution_architecture", "label": "Solution Architect"},
+    {"key": "technology_recommendation", "label": "Technology Advisor"},
+    {"key": "delivery_plan", "label": "Delivery Planner"},
 ]
 
 APP_NAME = "SolutionForge AI"

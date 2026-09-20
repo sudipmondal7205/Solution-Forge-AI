@@ -165,19 +165,23 @@ def stream_consultation(token: str, user_input: dict) -> Generator[dict, None, N
                 break
 
 
-def get_consultation_status(token: str, consultation_id: str) -> dict:
-    """GET /consultations/{id}/status -> {"overall_status": str, "agents": {...}}"""
-    if config.USE_MOCK_DATA:
-        return mock_data.get_mock_status(consultation_id)
-    try:
-        resp = requests.get(
-            f"{config.API_BASE_URL}/consultations/{consultation_id}/status",
-            headers=_headers(token),
-            timeout=config.REQUEST_TIMEOUT,
-        )
-    except requests.RequestException as exc:
-        raise ApiError(f"Could not reach the server: {exc}") from exc
-    return _handle_response(resp)
+# NOTE: get_consultation_status() was removed (commented out) because the
+# backend has no /consultations/{id}/status endpoint — the app now uses the
+# SSE streaming model (stream_consultation()) which pushes agent progress live.
+# Restore only if a real /status polling endpoint is added to the backend.
+# def get_consultation_status(token: str, consultation_id: str) -> dict:
+#     """GET /consultations/{id}/status -> {"overall_status": str, "agents": {...}}"""
+#     if config.USE_MOCK_DATA:
+#         return mock_data.get_mock_status(consultation_id)
+#     try:
+#         resp = requests.get(
+#             f"{config.API_BASE_URL}/consultations/{consultation_id}/status",
+#             headers=_headers(token),
+#             timeout=config.REQUEST_TIMEOUT,
+#         )
+#     except requests.RequestException as exc:
+#         raise ApiError(f"Could not reach the server: {exc}") from exc
+#     return _handle_response(resp)
 
 
 def get_consultation_result(token: str, consultation_id: str) -> dict:

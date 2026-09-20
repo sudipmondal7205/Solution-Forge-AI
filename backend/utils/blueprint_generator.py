@@ -43,9 +43,17 @@ Design notes
 from __future__ import annotations
 
 import html as _html
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from string import Template
 from typing import Any, Iterable, Optional
+
+IST_OFFSET = timezone(timedelta(hours=5, minutes=30))
+
+
+def _ist_now() -> datetime:
+    """Current time in Indian Standard Time (UTC+5:30)."""
+    return datetime.now(timezone.utc).astimezone(IST_OFFSET)
+
 
 # ---------------------------------------------------------------------------
 # Small rendering helpers
@@ -796,10 +804,7 @@ PAGE_TEMPLATE = Template(r"""<!DOCTYPE html>
     <div class="logo"><span class="logo-mark">S</span> SolutionForge AI</div>
     <div class="tagline">From Ideas to Implementable Solutions</div>
     <nav>
-      <a href="#" class="active">🏠 Home</a>
-      <a href="#">➕ Generate Blueprint</a>
-      <a href="#">📄 Reports</a>
-      <a href="#">⚙️ Settings</a>
+      <a href="#" class="active">🏠 Your Solution</a>
     </nav>
     <div class="foot">AI-powered multi-agent consulting for your technology journey.</div>
   </aside>
@@ -935,7 +940,7 @@ def generate_blueprint_html(
     html = PAGE_TEMPLATE.safe_substitute(
         BUSINESS_TITLE=esc(business_title_short),
         GENERATED_LABEL=esc((user_input or {}).get("requested_by", "Generated report")),
-        GENERATED_AT=esc(datetime.now(timezone.utc).strftime("%b %d, %Y • %H:%M UTC")),
+        GENERATED_AT=esc(_ist_now().strftime("%b %d, %Y • %I:%M %p IST")),
         STEPPER_HTML=render_stepper(has_judge),
         JUDGE_TAB_BTN=judge_tab_btn,
         JUDGE_TAB_PANEL=judge_tab_panel,

@@ -98,7 +98,7 @@ def _render_ready_banner(consultation_id: str, result_payload: dict) -> None:
             st.download_button(
                 "⬇️ Download HTML Blueprint Report",
                 data=html_report,
-                file_name="solution_blueprint.html",
+                file_name="blueprint.html",
                 mime="text/html",
                 use_container_width=True,
             )
@@ -120,14 +120,47 @@ def _render_summary_section(result: ConsultationResult) -> None:
         tech_count = len(result.technology_recommendation.technologies)
         st.metric("Technologies Selected", tech_count)
     with c3:
-        team_size = sum(role.get("count", 0) if isinstance(role, dict) else 0 for role in result.delivery_plan.team_roles)
+        # Backend sends `team` as plain role-name strings (no count), so the
+        # team size = number of distinct roles if no counts are present.
+        roles = result.delivery_plan.team_roles
+        counted = sum(
+            int(role.get("count", 0)) if isinstance(role, dict) and role.get("count") else 0
+            for role in roles
+        )
+        team_size = counted if counted else len([r for r in roles if r])
         st.metric("Recommended Team Size", team_size)
     with c4:
-        total_weeks = sum(phase.get("duration_weeks", 0) if isinstance(phase, dict) else 0 for phase in result.delivery_plan.timeline)
+        # Backend sends `timeline` as strings like "Month 1-2: ...". Derive the
+        # total duration from the month ranges when no dicts are available.
+        timeline = result.delivery_plan.timeline
+        total_weeks = sum(
+            int(phase.get("duration_weeks", 0))
+            if isinstance(phase, dict) and phase.get("duration_weeks")
+            else 0
+            for phase in timeline
+        )
+        if not total_weeks:
+            total_weeks = _months_to_weeks(timeline)
         st.metric("Estimated Duration", f"{total_weeks} weeks")
 
     if result.business_analysis.problem_statement:
         st.markdown(f"**Problem Statement:** {result.business_analysis.problem_statement}")
+
+
+def _months_to_weeks(timeline: list) -> int:
+    """Convert month-range strings (e.g. 'Month 1-2: ...') into total weeks."""
+    total_months = 0
+    for item in timeline:
+        if isinstance(item, dict):
+            continue
+        import re
+        m = re.search(r"Month\s+(\d+)(?:\s*[-–]\s*(\d+))?", str(item))
+        if not m:
+            continue
+        start = int(m.group(1))
+        end = int(m.group(2)) if m.group(2) else start
+        total_months += max(end - start + 1, 1)
+    return total_months * 4
 
 
 def _render_full_blueprint(result: ConsultationResult) -> None:

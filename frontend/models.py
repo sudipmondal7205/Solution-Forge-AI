@@ -20,6 +20,15 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 
+def _join_items(items: Any) -> str:
+    """Helper: join a list of strings into one comma-separated string."""
+    if isinstance(items, str):
+        return items
+    if isinstance(items, (list, tuple)):
+        return ", ".join(str(item) for item in items if item)
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # UserInput — sent BY the frontend TO the backend (POST /consultations)
 # ---------------------------------------------------------------------------
@@ -156,15 +165,15 @@ class DeliveryPlan:
         d = d or {}
         return DeliveryPlan(
             workstreams=d.get("workstreams", []),
-            team_roles=d.get("team_roles", []),
+            team_roles=d.get("team_roles") or d.get("team", []),
             timeline=d.get("timeline", []),
             milestones=d.get("milestones", []),
             dependencies=d.get("dependencies", []),
             risks=d.get("risks", []),
             testing_strategy=d.get("testing_strategy", []),
-            deployment_strategy=d.get("deployment_strategy", ""),
+            deployment_strategy=d.get("deployment_strategy") or _join_items(d.get("deployment_plan", [])),
             release_strategy=d.get("release_strategy", ""),
-            future_evolution=d.get("future_evolution", []),
+            future_evolution=d.get("future_evolution") or d.get("future_scope", []),
         )
 
 
