@@ -21,7 +21,36 @@ import mock_data
 
 class ApiError(Exception):
     """Raised for any failed API call. `str(err)` is safe to show to the user."""
-    pass
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _detail_message(payload) -> str:
+    """Turn a FastAPI error payload's `detail` into a clean, user-safe message."""
+    if isinstance(payload, dict):
+        detail = payload.get("detail")
+        if isinstance(detail, str) and detail:
+            return detail
+        if isinstance(detail, list) and detail and isinstance(detail[0], dict):
+            msg = detail[0].get("msg") or ""
+            msg = msg.replace("Value error, ", "").replace(" [type=value_error", "").strip()
+            if msg:
+                return msg
+    return ""
+
+
+def _raise_error(response: requests.Response, payload) -> None:
+    msg = _detail_message(payload)
+    if not msg:
+        msg = f"Request failed with status {response.status_code}."
+    if "blocked" in msg.lower():
+        msg = (
+            "This input was blocked — it looks like a prompt-injection attempt "
+            "(e.g. \"ignore instructions\" or \"reveal the system prompt\"). "
+            "Please rephrase your business idea as a plain description and try again."
+        )
+    raise ApiError(msg, status_code=response.status_code)
 
 
 def _headers(token: Optional[str] = None) -> dict:
@@ -37,8 +66,7 @@ def _handle_response(response: requests.Response) -> dict:
     except ValueError:
         payload = {}
     if not response.ok:
-        detail = payload.get("detail") if isinstance(payload, dict) else None
-        raise ApiError(detail or f"Request failed with status {response.status_code}.")
+        _raise_error(response, payload)
     return payload
 
 
@@ -146,8 +174,7 @@ def stream_consultation(token: str, user_input: dict) -> Generator[dict, None, N
             payload = resp.json()
         except ValueError:
             payload = {}
-        detail = payload.get("detail") if isinstance(payload, dict) else None
-        raise ApiError(detail or f"Request failed with status {resp.status_code}.")
+        _raise_error(resp, payload)
 
     # Parse the SSE stream line by line
     for line in resp.iter_lines(decode_unicode=True):

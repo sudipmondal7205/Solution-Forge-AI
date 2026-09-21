@@ -108,7 +108,7 @@ def validate_daily_traffic(value) -> Tuple[bool, str]:
     except (TypeError, ValueError):
         return False, "Expected daily traffic must be a whole number."
     if value_int < MIN_DAILY_TRAFFIC:
-        return False, "Expected daily traffic must be greater than 0."
+        return False, f"Expected daily traffic must be greater than 0 (currently {value_int})."
     if value_int > MAX_DAILY_TRAFFIC:
         return False, "That traffic number looks too large — please double-check."
     return True, ""
@@ -120,7 +120,7 @@ def validate_delivery_timeline(months) -> Tuple[bool, str]:
     except (TypeError, ValueError):
         return False, "Delivery timeline must be a number of months."
     if months_int < MIN_DELIVERY_MONTHS:
-        return False, "Please choose a delivery timeline of at least 1 month."
+        return False, f"Please choose a delivery timeline of at least 1 month (currently {months_int})."
     if months_int > MAX_DELIVERY_MONTHS:
         return False, f"Delivery timeline cannot exceed {MAX_DELIVERY_MONTHS} months."
     return True, ""
@@ -145,3 +145,18 @@ def validate_consultation_form(business_idea: str, expected_daily_traffic,
         if not is_valid:
             return False, error
     return True, ""
+
+
+def consultation_errors(business_idea: str, expected_daily_traffic,
+                        delivery_timeline_months, data_hosting_country: str) -> list:
+    """Returns a list of EVERY failing field, so the UI can show all at once."""
+    return [
+        error
+        for is_valid, error in [
+            validate_business_idea(business_idea),
+            validate_daily_traffic(expected_daily_traffic),
+            validate_delivery_timeline(delivery_timeline_months),
+            validate_country(data_hosting_country),
+        ]
+        if not is_valid
+    ]

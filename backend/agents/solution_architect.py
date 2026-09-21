@@ -1,5 +1,6 @@
 from crewai import Agent, Task
 from backend.models.solution_architecture import SolutionArchitecture
+from backend.agents._prompt_safety import render_user_input_block
 
 
 def create_solution_architect(llm, user_input, context=None):
@@ -30,7 +31,7 @@ def create_solution_architect(llm, user_input, context=None):
             to design a complete system architecture.
 
             === USER INPUT ===
-            {user_input}
+            {render_user_input_block(user_input)}
 
             Design the system architecture considering the MVP scope,
             expected traffic, timeline, and cloud preferences.

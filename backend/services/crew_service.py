@@ -2,6 +2,7 @@ import json
 import queue
 import threading
 import crewai.llms.cache as _crewai_cache
+from backend.core.sanitize import sanitize_output
 from backend.db.database import complete_consultation, update_agent_output
 from backend.models.user_input import UserInput as CrewUserInput
 from backend.services.orchestration import create_solution_crew
@@ -27,12 +28,12 @@ def _output_to_dict(task_output) -> dict:
         if val is not None:
             try:
                 if hasattr(val, "model_dump"):
-                    return val.model_dump(mode="json")
-                return dict(val)
+                    return sanitize_output(val.model_dump(mode="json"))
+                return sanitize_output(dict(val))
             except Exception:
                 pass
     raw = getattr(task_output, "raw", None) or str(task_output)
-    return {"raw": raw}
+    return sanitize_output({"raw": raw})
 
 
 

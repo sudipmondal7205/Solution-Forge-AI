@@ -10,6 +10,8 @@ On submit, the page opens an SSE stream to POST /consultations and renders
 agent outputs live as each agent finishes — no page navigation needed.
 """
 
+import html
+
 import streamlit as st
 import api_client
 import config
@@ -17,7 +19,7 @@ import session_state as ss
 import styles
 from api_client import ApiError
 from models import UserInput
-from validators import validate_consultation_form
+from validators import consultation_errors, validate_consultation_form
 
 
 # Map backend agent keys to human-readable labels
@@ -65,6 +67,10 @@ def render() -> None:
 
     form_container = st.empty()
     with form_container.container():
+        notice = st.session_state.pop("form_notice", None)
+        if notice:
+            st.error(notice)
+
         col_left, col_right = st.columns(2)
 
         with col_left:
@@ -84,6 +90,7 @@ def render() -> None:
                 "Delivery Timeline (Months)",
                 min_value=0, max_value=10, value=0, step=1,
                 key="consult_timeline",
+                help="Starting at 0 — slide up to the number of months for delivery.",
             )
 
         with col_right:
@@ -95,9 +102,8 @@ def render() -> None:
             )
             expected_daily_traffic = st.number_input(
                 "Expected Daily Traffic",
-                min_value=0, step=100, value=0,
-                key="consult_daily_traffic",
-                help="Approximate number of daily active users / requests.",
+                min_value=0, step=100, value=0, key="consult_daily_traffic",
+                help="Approximate number of daily active users / requests. Starts at 0 — add it to unlock the button.",
             )
             data_hosting_country = st.selectbox(
                 "Country",
@@ -105,10 +111,16 @@ def render() -> None:
                 key="consult_country",
                 format_func=lambda c: "Search a country..." if c == "" else c,
             )
-
         st.write("")
+        is_valid = bool(
+            business_idea.strip()
+            and data_hosting_country
+            and expected_daily_traffic > 0
+            and delivery_timeline_months > 0
+        )
         submit = st.button("🚀  Generate Solution Blueprint", key="consult_submit",
-                     type="primary", use_container_width=True)
+                     type="primary", use_container_width=True,
+                     disabled=not is_valid)
 
     if submit:
         form_container.empty()
@@ -278,7 +290,26 @@ def _submit(business_idea, technology_preference, cloud_preference,
                 return
 
     except ApiError as err:
-        status_placeholder.error(str(err))
+        if getattr(err, "status_code", 0) == 422:
+            # Backend rejected the input (e.g. prompt injection). Go back to
+            # the New Consultation form and show WHY it was stopped.
+            _reset_to_form(f"⛔ {err}")
+        else:
+            status_placeholder.error(str(err))
+
+
+def _reset_to_form(message: str) -> None:
+    """Return to the New Consultation form and show a clear notice."""
+    st.session_state["form_notice"] = message
+    st.session_state["consult_submitted"] = False
+    st.session_state.pop("consult_results", None)
+    st.session_state.pop("active_consultation_id", None)
+    st.session_state.pop("consult_form_data", None)
+    for key in ("consult_business_idea", "consult_tech_preference",
+                "consult_cloud_preference", "consult_timeline",
+                "consult_daily_traffic", "consult_country"):
+        st.session_state.pop(key, None)
+    st.rerun()
 
 
 def _render_agent_output(agent_key: str, data: dict, expanded: bool = True) -> None:
@@ -301,11 +332,16 @@ def _render_agent_output(agent_key: str, data: dict, expanded: bool = True) -> N
             st.write(f"**{k}**: {v}")
 
 
+def _esc(value) -> str:
+    """HTML-escape any dynamic value before it goes into unsafe HTML."""
+    return html.escape("" if value is None else str(value), quote=True)
+
+
 def _card(title: str, body_html: str) -> None:
     """Render a compact branded card with a title and HTML body."""
     st.markdown(
         f"""<div class="sf-card" style="padding:1rem 1.2rem; margin-bottom:0.7rem;">
-            <div class="sf-card-title" style="margin-bottom:0.5rem; font-size:0.88rem;">{title}</div>
+            <div class="sf-card-title" style="margin-bottom:0.5rem; font-size:0.88rem;">{_esc(title)}</div>
             <div style="font-size:0.84rem; line-height:1.5; color:var(--sf-text);">{body_html}</div>
         </div>""",
         unsafe_allow_html=True,
@@ -313,16 +349,19 @@ def _card(title: str, body_html: str) -> None:
 
 
 def _list_to_html(items: list, compact: bool = True) -> str:
-    """Convert a list of strings or dicts into compact HTML."""
+    """Convert a list of strings or dicts into compact (escaped) HTML."""
     if not items:
         return "<em>None</em>"
     parts = []
     for item in items:
         if isinstance(item, dict):
-            inner = " · ".join(f"<strong>{k.replace('_', ' ').title()}:</strong> {v}" for k, v in item.items())
+            inner = " · ".join(
+                f"<strong>{_esc(k.replace('_', ' ').title())}:</strong> {_esc(v)}"
+                for k, v in item.items()
+            )
             parts.append(f"<li style='margin-bottom:2px;'>{inner}</li>")
         else:
-            parts.append(f"<li style='margin-bottom:2px;'>{item}</li>")
+            parts.append(f"<li style='margin-bottom:2px;'>{_esc(item)}</li>")
     pad = "margin:0; padding-left:1.2rem;" if compact else "padding-left:1.2rem;"
     return f"<ul style='{pad}'>{''.join(parts)}</ul>"
 
@@ -338,9 +377,9 @@ def _render_generic_remaining(data: dict, handled_keys: set) -> None:
         if isinstance(value, list):
             body = _list_to_html(value)
         elif isinstance(value, dict):
-            body = _list_to_html([f"<strong>{k.replace('_', ' ').title()}:</strong> {v}" for k, v in value.items()])
+            body = _list_to_html([f"<strong>{_esc(k.replace('_', ' ').title())}:</strong> {_esc(v)}" for k, v in value.items()])
         else:
-            body = str(value)
+            body = _esc(value)
         cards_html.append((title, body))
 
     # Render in 2-column rows
@@ -357,7 +396,7 @@ def _render_business_analysis(data: dict) -> None:
 
     problem = data.get("problem_statement", "")
     if problem:
-        _card("📋 Problem Statement", f"<p style='margin:0;'>{problem}</p>")
+        _card("📋 Problem Statement", f"<p style='margin:0;'>{_esc(problem)}</p>")
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -378,16 +417,16 @@ def _render_solution_architecture(data: dict) -> None:
         _card("🏗️ Architecture Style",
               f"<div style='font-size:0.95rem; font-weight:700; color:var(--sf-navy); "
               f"background:var(--sf-blue-light); border:1px solid var(--sf-border); "
-              f"border-radius:10px; padding:0.7rem 1rem; display:inline-block;'>{style}</div>")
+              f"border-radius:10px; padding:0.7rem 1rem; display:inline-block;'>{_esc(style)}</div>")
 
     c1, c2 = st.columns(2)
     comps = data.get("components", [])
     comp_html = ""
     for comp in comps:
         if isinstance(comp, dict):
-            comp_html += f"<li style='margin-bottom:3px;'><strong>{comp.get('name', '')}</strong>: {comp.get('description', '')}</li>"
+            comp_html += f"<li style='margin-bottom:3px;'><strong>{_esc(comp.get('name', ''))}</strong>: {_esc(comp.get('description', ''))}</li>"
         else:
-            comp_html += f"<li style='margin-bottom:3px;'>{comp}</li>"
+            comp_html += f"<li style='margin-bottom:3px;'>{_esc(comp)}</li>"
     with c1:
         _card("🧩 Components", f"<ul style='margin:0; padding-left:1.2rem;'>{comp_html}</ul>")
 
@@ -395,7 +434,7 @@ def _render_solution_architecture(data: dict) -> None:
     if flows:
         flow_html = ""
         for i, flow in enumerate(flows, 1):
-            flow_html += f"<li style='margin-bottom:3px;'>{flow}</li>"
+            flow_html += f"<li style='margin-bottom:3px;'>{_esc(flow)}</li>"
         with c2:
             _card("🔄 Data Flow", f"<ol style='margin:0; padding-left:1.2rem;'>{flow_html}</ol>")
 
@@ -407,9 +446,9 @@ def _render_technology_recommendation(data: dict) -> None:
 
     cloud = data.get("cloud", {})
     if isinstance(cloud, dict) and cloud:
-        services = ", ".join(cloud.get("services", []))
+        services = ", ".join(_esc(s) if s is not None else "" for s in cloud.get("services", []))
         _card("☁️ Cloud Provider",
-              f"<strong>{cloud.get('provider', 'N/A')}</strong>"
+              f"<strong>{_esc(cloud.get('provider', 'N/A'))}</strong>"
               f"<br><small style='color:var(--sf-text-muted);'>Services: {services}</small>")
 
     techs = data.get("technologies", [])
@@ -417,11 +456,11 @@ def _render_technology_recommendation(data: dict) -> None:
         rows = ""
         for tech in techs:
             if isinstance(tech, dict):
-                rows += (f"<tr><td style='padding:4px 8px;'><strong>{tech.get('category', '')}</strong></td>"
-                         f"<td style='padding:4px 8px;'>{tech.get('technology', '')}</td>"
-                         f"<td style='padding:4px 8px; color:var(--sf-text-muted); font-size:0.8rem;'>{tech.get('reason', '')}</td></tr>")
+                rows += (f"<tr><td style='padding:4px 8px;'><strong>{_esc(tech.get('category', ''))}</strong></td>"
+                         f"<td style='padding:4px 8px;'>{_esc(tech.get('technology', ''))}</td>"
+                         f"<td style='padding:4px 8px; color:var(--sf-text-muted); font-size:0.8rem;'>{_esc(tech.get('reason', ''))}</td></tr>")
             else:
-                rows += f"<tr><td style='padding:4px 8px;' colspan='3'>{tech}</td></tr>"
+                rows += f"<tr><td style='padding:4px 8px;' colspan='3'>{_esc(tech)}</td></tr>"
         table = (f"<table style='width:100%; border-collapse:collapse; font-size:0.84rem;'>"
                  f"<tr style='border-bottom:1px solid var(--sf-border);'>"
                  f"<th style='padding:4px 8px; text-align:left;'>Category</th>"
@@ -442,10 +481,10 @@ def _render_delivery_plan(data: dict) -> None:
         rows = ""
         for p in timeline:
             if isinstance(p, dict):
-                rows += (f"<tr><td style='padding:4px 8px;'>{p.get('phase','')}</td>"
-                         f"<td style='padding:4px 8px;'>{p.get('duration_weeks','')} wks</td></tr>")
+                rows += (f"<tr><td style='padding:4px 8px;'>{_esc(p.get('phase',''))}</td>"
+                         f"<td style='padding:4px 8px;'>{_esc(p.get('duration_weeks',''))} wks</td></tr>")
             else:
-                rows += f"<tr><td style='padding:4px 8px;' colspan='2'>{p}</td></tr>"
+                rows += f"<tr><td style='padding:4px 8px;' colspan='2'>{_esc(p)}</td></tr>"
         table = (f"<table style='width:100%; border-collapse:collapse; font-size:0.84rem;'>"
                  f"<tr style='border-bottom:1px solid var(--sf-border);'>"
                  f"<th style='padding:4px 8px; text-align:left;'>Phase</th>"
@@ -457,9 +496,9 @@ def _render_delivery_plan(data: dict) -> None:
     role_items = []
     for role in roles:
         if isinstance(role, dict):
-            role_items.append(f"{role.get('count', '?')}× {role.get('role', '')}")
+            role_items.append(f"{_esc(role.get('count', '?'))}× {_esc(role.get('role', ''))}")
         else:
-            role_items.append(str(role))
+            role_items.append(_esc(str(role)))
     with c2:
         _card("👥 Team Roles", _list_to_html(role_items))
 

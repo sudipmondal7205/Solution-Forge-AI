@@ -1,5 +1,6 @@
 from crewai import Agent, Task
 from backend.models.business_analyst import BusinessAnalysis
+from backend.agents._prompt_safety import render_user_input_block
 
 
 
@@ -32,7 +33,7 @@ def create_business_analyst(llm, user_input):
             "to identify the business requirements:\n\n"
 
             "=== USER INPUT ===\n"
-            f"{user_input}\n\n"
+            f"{render_user_input_block(user_input)}\n\n"
 
             "Identify:\n"
             "1. Problem statement\n"

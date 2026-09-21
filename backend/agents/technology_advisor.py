@@ -4,6 +4,7 @@ from crewai.tools import tool
 from backend.models.technology_advisor import TechnologyRecommendation
 from backend.core.config import settings
 from backend.core.llm import gemini_llm
+from backend.agents._prompt_safety import render_user_input_block, neutralise
 
 def create_technology_advisor(llm, 
         user_input, 
@@ -33,7 +34,7 @@ def create_technology_advisor(llm,
                 },
 
                 json={
-                    "q": query,
+                    "q": neutralise(query),
                     "num": 5
                 },
 
@@ -102,7 +103,7 @@ def create_technology_advisor(llm,
             Analyze the user input and the outputs from the Business Analyst and Solution Architect to recommend a complete, production-ready technology stack.
 
             === USER INPUT ===
-            {user_input}
+            {render_user_input_block(user_input)}
 
             Requirements:
 
