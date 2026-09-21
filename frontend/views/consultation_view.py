@@ -409,8 +409,53 @@ def _render_business_analysis(data: dict) -> None:
     _render_generic_remaining(data, handled)
 
 
+def _generate_mermaid_code(components: list, connections: list) -> str:
+    if not components:
+        return ""
+    
+    init_str = """%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'primaryColor': '#ffffff',
+      'primaryBorderColor': '#1d5fb8',
+      'primaryTextColor': '#0f2a4d',
+      'textColor': '#0f2a4d',
+      'nodeTextColor': '#0f2a4d',
+      'lineColor': '#1d5fb8',
+      'secondaryColor': '#f3f5f9',
+      'tertiaryColor': '#eaf1fd',
+      'edgeLabelBackground': '#ffffff'
+    }
+  }
+}%%"""
+
+    # Explicit defaults take precedence over Streamlit's Mermaid theme, whose
+    # dark node fill otherwise makes the navy labels difficult to read.
+    lines = [
+        init_str,
+        "flowchart TD",
+        "    classDef default fill:#ffffff,stroke:#1d5fb8,color:#0f2a4d,stroke-width:1px;",
+    ]
+    for comp in components:
+        if isinstance(comp, dict):
+            cid = comp.get("id", "").replace(" ", "_").replace("-", "_")
+            cname = comp.get("name", "")
+            lines.append(f"    {cid}[\"{cname}\"]")
+    for conn in connections:
+        if isinstance(conn, dict):
+            src = conn.get("source", "").replace(" ", "_").replace("-", "_")
+            tgt = conn.get("target", "").replace(" ", "_").replace("-", "_")
+            lbl = conn.get("label", "")
+            if lbl:
+                lines.append(f"    {src} -->|{lbl}| {tgt}")
+            else:
+                lines.append(f"    {src} --> {tgt}")
+    return "\n".join(lines)
+
+
 def _render_solution_architecture(data: dict) -> None:
-    handled = {"architecture_style", "components", "data_flow"}
+    handled = {"architecture_style", "components", "connections", "data_flow"}
 
     style = data.get("architecture_style", "")
     if style:
@@ -418,6 +463,15 @@ def _render_solution_architecture(data: dict) -> None:
               f"<div style='font-size:0.95rem; font-weight:700; color:var(--sf-navy); "
               f"background:var(--sf-blue-light); border:1px solid var(--sf-border); "
               f"border-radius:10px; padding:0.7rem 1rem; display:inline-block;'>{_esc(style)}</div>")
+
+    comps = data.get("components", [])
+    conns = data.get("connections", [])
+    
+    if comps and conns:
+        st.markdown('<div class="sf-section-label" style="margin-top: 1rem;">Architecture Diagram</div>', unsafe_allow_html=True)
+        mermaid_code = _generate_mermaid_code(comps, conns)
+        st.markdown(f"```mermaid\n{mermaid_code}\n```")
+        st.write("")
 
     c1, c2 = st.columns(2)
     comps = data.get("components", [])
@@ -551,4 +605,3 @@ def _render_saved_results() -> None:
                 _render_agent_output(key, agent_results[key])
             else:
                 st.info("No output for this agent yet.")
-

@@ -1,92 +1,144 @@
-import queue
-import threading
-import json
-import sys
-import os
+from crewai import Crew, Process
+from backend.agents.solution_architect import create_solution_architect
+from backend.core.llm import gemini_llm
+from backend.models.business_analyst import BusinessAnalysis
+from backend.utils.architecture_to_mermaid import architecture_to_mermaid
 
-# Ensure the backend module can be found
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from backend.core.llm import llm
-from backend.services.orchestration import create_solution_crew
-from backend.models.user_input import UserInput
+user_input = """
+    Healthcare appointment platform.
 
-# 1. Define a mock user input
-mock_user_input = {
-    "business_idea": "Healthcare Appointment & Patient Management Platform. Patients can register, search doctors, book appointments.",
-    "technology_preference": "Open-source",
-    "cloud_preference": "AWS",
-    "expected_daily_traffic": 20000,
-    "delivery_timeline_months": 6,
-    "data_hosting_country": "India"
-}
+    20 clinics
+    500 doctors
+    20,000 daily active users
 
-print("🚀 Starting Streaming SolutionForge AI Consulting...\n")
+    MVP must be delivered in 6 months.
 
-# 2. Setup the Queue and State
-message_queue = queue.Queue()
-agent_names = ["Business Analyst", "Solution Architect", "Technology Advisor", "Delivery Planner"]
-state = {"index": 0}
+    Data must be hosted in India.
 
-# 3. The Callback (fires when ONE agent finishes)
-def on_task_completed(task_output):
-    idx = state["index"]
-    if idx < len(agent_names):
-        agent_name = agent_names[idx]
-        
-        # Try to extract the structured data
-        if hasattr(task_output, 'pydantic') and task_output.pydantic:
-            data = task_output.pydantic.model_dump(mode="json")
-        elif hasattr(task_output, 'json_dict') and task_output.json_dict:
-            data = task_output.json_dict
-        else:
-            data = {"raw": str(task_output)}
-            
-        # Push to queue immediately!
-        message_queue.put({"agent": agent_name, "data": data})
-        state["index"] += 1
+    Prefer open-source technologies.
 
-# 4. The Background Thread Function
-def run_crew():
-    try:
-        # Initialize
-        crew_input = UserInput(**mock_user_input)
-        crew = create_solution_crew(llm, crew_input)
-        
-        # Attach the callback to every task
-        for task in crew.tasks:
-            task.callback = on_task_completed
-            
-        # Block and run (in this background thread)
-        crew.kickoff()
-        
-        # Send poison pill to signal completion
-        message_queue.put(None) 
-    except Exception as e:
-        message_queue.put({"error": str(e)})
-        message_queue.put(None)
+    Prefer AWS cloud.
+    """
 
-# 5. Start the background thread
-threading.Thread(target=run_crew).start()
 
-# 6. Main Thread: Listen to the queue (Simulating what FastAPI's StreamingResponse does)
-while True:
-    # This blocks until an agent pushes data to the queue
-    msg = message_queue.get() 
+business_analysis = BusinessAnalysis(
+    problem_statement=(
+        "Build a healthcare appointment and patient management platform "
+        "for multiple clinics that allows patients to manage appointments "
+        "and enables doctors and clinic staff to manage schedules and "
+        "patient information."
+    ),
+
+    users=[
+        "Patients",
+        "Doctors",
+        "Clinic Staff",
+        "Clinic Administrators"
+    ],
+
+    stakeholders=[
+        "Patients",
+        "Doctors",
+        "Clinic Management",
+        "Platform Administrators"
+    ],
+
+    functional_requirements=[
+        "Patient registration and authentication",
+        "Doctor profile and availability management",
+        "Appointment booking and cancellation",
+        "Doctor appointment schedule management",
+        "Patient information management",
+        "Clinic management",
+        "Appointment notifications",
+        "Role-based access control"
+    ],
+
+    non_functional_requirements=[
+        "Support approximately 20,000 daily active users",
+        "Provide secure access to patient information",
+        "Provide reliable appointment management",
+        "Support multiple clinics and doctors",
+        "Allow the system to scale as usage increases",
+        "Provide a production-ready MVP within the required timeline"
+    ],
+
+    mvp_scope=[
+        "Patient registration and authentication",
+        "Doctor management",
+        "Clinic management",
+        "Appointment booking and cancellation",
+        "Doctor availability management",
+        "Patient information management",
+        "Basic notifications",
+        "Role-based access control"
+    ],
+
+    future_scope=[
+        "Online doctor consultations",
+        "Payment integration",
+        "Advanced analytics and reporting",
+        "Mobile applications",
+        "AI-based appointment recommendations",
+        "Integration with external healthcare systems"
+    ],
+
+    constraints=[
+        "Approximately 20 clinics",
+        "Approximately 500 doctors",
+        "Approximately 20,000 daily active users",
+        "Production-ready MVP required within 6 months",
+        "Healthcare data must be hosted in India",
+        "Prefer open-source technologies",
+        "Prefer AWS cloud"
+    ],
+
+    assumptions=[
+        "Patients and doctors will access the platform through web or mobile clients",
+        "Clinics will manage their own doctors and schedules",
+        "Authentication and authorization are required",
+        "The initial release will focus on appointment and patient management",
+        "The system will initially operate within the specified deployment region"
+    ],
+
+    risks=[
+        "High traffic during peak appointment periods",
+        "Unauthorized access to sensitive patient information",
+        "Database performance issues as data and usage increase",
+        "Integration complexity with external healthcare systems",
+        "Scope expansion affecting the 6-month MVP timeline"
+    ],
+
+    open_questions=[
+        "Are online consultations required in the MVP?",
+        "Are payments required in the MVP?",
+        "What notification channels are required?",
+        "What specific patient data must be stored?",
+        "Are there existing healthcare systems that need integration?"
+    ]
+)
+
+
+
+def main():
+
+    agent, task = create_solution_architect(
+        llm=gemini_llm,
+        user_input=user_input,
+        business_analysis=business_analysis
+    )
+
+    crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=True)
+
+    result = crew.kickoff() 
+
+    print(result.pydantic)
+
+    architecture = result.pydantic
+    mermaid_code = architecture_to_mermaid(architecture)
+    print(mermaid_code)
+
+if __name__ == "__main__":
+    main()
     
-    if msg is None:
-        print("\n✅ Consulting Complete! All agents finished.")
-        break
-        
-    if "error" in msg:
-        print(f"\n❌ Error occurred: {msg['error']}")
-        break
-        
-    # Print the output the exact moment it arrives
-    print(f"\n======================================================")
-    print(f"🎉 STREAM EVENT RECEIVED: {msg['agent']} finished!")
-    print(f"======================================================")
-    
-    # Pretty print just the first 500 characters of the JSON to prove it works
-    json_str = json.dumps(msg['data'], indent=2)
-    print(json_str[:500] + "\n... [truncated] ...\n")

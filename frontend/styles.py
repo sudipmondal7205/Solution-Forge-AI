@@ -154,6 +154,40 @@ GLOBAL_CSS = """
         margin: 0.2rem 0 0.5rem 0;
     }
 
+    /* Mermaid's floating toolbar has a dark surface. The base typography
+       rule above otherwise gives its icon spans the same dark foreground. */
+    div[data-testid="stMarkdownContainer"] button[title],
+    div[data-testid="stMarkdownContainer"] button[aria-label] {
+        color: #ffffff !important;
+        width: auto !important;
+        min-width: 0 !important;
+        min-height: 2rem !important;
+        padding: 0.35rem 0.55rem !important;
+        gap: 0.35rem;
+    }
+    div[data-testid="stMarkdownContainer"] button[title] *,
+    div[data-testid="stMarkdownContainer"] button[aria-label] * {
+        color: #ffffff !important;
+        fill: currentColor !important;
+    }
+    /* Mermaid only exposes these actions as icons by default. Keep the action
+       name visible, so users do not have to hover to discover it. */
+    div[data-testid="stMarkdownContainer"] button[title]::after {
+        content: attr(title);
+        font-size: 0.75rem;
+        line-height: 1;
+        white-space: nowrap;
+    }
+    div[data-testid="stMarkdownContainer"] button[aria-label]:not([title])::after {
+        content: attr(aria-label);
+        font-size: 0.75rem;
+        line-height: 1;
+        white-space: nowrap;
+    }
+    [role="tooltip"], [role="tooltip"] * {
+        color: #ffffff !important;
+    }
+
     /* ================= AUTH PAGE ================= */
     .sf-auth-outer {
         display: flex;
@@ -456,7 +490,7 @@ def page_header(title: str) -> None:
 
 def agent_status_class(status: str) -> str:
     return {
-        "done": "done",
+        "completed": "completed",
         "in_progress": "in_progress",
         "pending": "pending",
         "error": "error",

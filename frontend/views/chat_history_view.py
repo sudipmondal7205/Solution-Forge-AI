@@ -27,12 +27,13 @@ def render() -> None:
         st.info("You haven't run any consultations yet. Start one from **New Consultation**.")
         return
 
-    for entry in history:
-        _render_history_row(entry)
+    for index, entry in enumerate(history):
+        _render_history_row(entry, show_headings=index == 0)
+        if index < len(history) - 1:
+            st.divider()
 
 
-def _render_history_row(entry: dict) -> None:
-    st.markdown('<div class="sf-card sf-hover">', unsafe_allow_html=True)
+def _render_history_row(entry: dict, show_headings: bool = False) -> None:
     col_title, col_date, col_cloud, col_status, col_view, col_export = st.columns(
         [3, 1.4, 1.4, 1.6, 1.2, 1.2]
     )
@@ -58,16 +59,20 @@ def _render_history_row(entry: dict) -> None:
         date_str = str(timestamp) if timestamp else ""
 
     with col_title:
-        st.markdown("**Title**")
+        if show_headings:
+            st.markdown("**Title**")
         st.write(title or "Untitled")
     with col_date:
-        st.markdown("**Date**")
+        if show_headings:
+            st.markdown("**Date**")
         st.write(date_str)
     with col_cloud:
-        st.markdown("**Cloud Preference**")
+        if show_headings:
+            st.markdown("**Cloud Preference**")
         st.write(cloud_preference)
     with col_status:
-        st.markdown("**Status**")
+        if show_headings:
+            st.markdown("**Status**")
         status_label = entry.get("status", "Processing")
         badge_class = styles.status_badge_class(status_label)
         st.markdown(f'<span class="sf-badge {badge_class}">{status_label}</span>', unsafe_allow_html=True)
@@ -100,5 +105,3 @@ def _render_history_row(entry: dict) -> None:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Failed to fetch blueprint: {e}")
-
-    st.markdown("</div>", unsafe_allow_html=True)

@@ -127,11 +127,22 @@ def _mock_solution_architecture() -> dict:
     return {
         "architecture_style": "Modular Monolith",
         "components": [
-            {"name": "API Layer", "responsibility": "Handle client requests"},
-            {"name": "Authentication Module", "responsibility": "User authentication and authorization"},
-            {"name": "Appointment Module", "responsibility": "Booking and appointment management"},
-            {"name": "Patient Module", "responsibility": "Patient information management"},
-            {"name": "Notification Module", "responsibility": "Appointment notifications"},
+            {"id": "api", "name": "API Layer", "responsibility": "Handle client requests"},
+            {"id": "auth", "name": "Authentication Module", "responsibility": "User authentication and authorization"},
+            {"id": "appointment", "name": "Appointment Module", "responsibility": "Booking and appointment management"},
+            {"id": "patient", "name": "Patient Module", "responsibility": "Patient information management"},
+            {"id": "notification", "name": "Notification Module", "responsibility": "Appointment notifications"},
+            {"id": "db", "name": "Database", "responsibility": "Core persistent storage"},
+            {"id": "cache", "name": "Redis Cache", "responsibility": "Fast data access"}
+        ],
+        "connections": [
+            {"source": "api", "target": "auth", "label": "Authenticates"},
+            {"source": "api", "target": "appointment", "label": "Routes requests"},
+            {"source": "api", "target": "patient", "label": "Routes requests"},
+            {"source": "appointment", "target": "db", "label": "Reads/Writes"},
+            {"source": "patient", "target": "db", "label": "Reads/Writes"},
+            {"source": "appointment", "target": "notification", "label": "Triggers"},
+            {"source": "patient", "target": "cache", "label": "Caches profile"}
         ],
         "database": {"type": "Relational", "purpose": "Store users, doctors, appointments and patient data"},
         "cache": {"required": True, "purpose": "Improve performance for frequently accessed data"},

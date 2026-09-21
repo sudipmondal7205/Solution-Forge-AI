@@ -91,6 +91,7 @@ class BusinessAnalysis:
 class SolutionArchitecture:
     architecture_style: str = ""
     components: List[Dict[str, str]] = field(default_factory=list)
+    connections: List[Dict[str, str]] = field(default_factory=list)
     database: Dict[str, str] = field(default_factory=dict)
     cache: Dict[str, Any] = field(default_factory=dict)
     data_flow: List[str] = field(default_factory=list)
@@ -107,6 +108,7 @@ class SolutionArchitecture:
         return SolutionArchitecture(
             architecture_style=d.get("architecture_style", ""),
             components=d.get("components", []),
+            connections=d.get("connections", []),
             database=d.get("database", {}),
             cache=d.get("cache", {}),
             data_flow=d.get("data_flow", []),

@@ -69,3 +69,6 @@ Thumbs.db
 # Runtime logs
 # ==========================================
 *.log
+
+
+.crew_data/
