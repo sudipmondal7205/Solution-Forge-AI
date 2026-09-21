@@ -25,5 +25,5 @@ app.include_router(consultations.router)
 @app.get("/health")
 def health_check():
     """Quick check that the API + MongoDB are reachable."""
-    db.command("ping")  # raises if MongoDB is not reachable
+    db.command("ping")
     return {"status": "ok", "database": "connected"}

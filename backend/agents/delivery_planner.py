@@ -3,7 +3,7 @@ from crewai import Agent, Task
 from backend.models.delivery_planner import DeliveryPlan
 
 
-def create_delivery_planner(llm, context=None):
+def create_delivery_planner(llm, user_input, context=None):
 
     delivery_planner_agent = Agent(
         role="Delivery Planner and Project Execution Specialist",
@@ -30,7 +30,13 @@ def create_delivery_planner(llm, context=None):
     )
 
     delivery_planner_task = Task(
-        description="""
+        description=f"""
+            Analyze the user input and the outputs from the Business Analyst and Solution Architect to recommend a complete, production-ready technology stack.
+            
+            === USER INPUT ===
+            {user_input}
+
+
             You are the final Delivery Planner Agent in a multi-agent
             AI solution consulting system.
 

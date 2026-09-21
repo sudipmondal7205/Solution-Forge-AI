@@ -26,8 +26,8 @@ def create_solution_architect(llm, user_input, context=None):
 
     solution_architecture_task = Task(
         description=f"""
-            Analyze the user constraints and business requirements from the Business Analyst to
-            design a complete system architecture.
+            Analyze the user constraints and Business Analyst output
+            to design a complete system architecture.
 
             === USER INPUT ===
             {user_input}
@@ -39,15 +39,16 @@ def create_solution_architect(llm, user_input, context=None):
 
             1. Architecture style
             2. Major system components
-            3. Database design
-            4. Cache strategy
-            5. Data flow
-            6. Security approach
-            7. Scalability approach
-            8. MVP architecture
-            9. Future evolution
-            10. Architecture rationale
-            11. Architecture risks
+            3. Component connections
+            4. Database design
+            5. Cache strategy
+            6. Data flow
+            7. Security approach
+            8. Scalability approach
+            9. MVP architecture
+            10. Future evolution
+            11. Architecture rationale
+            12. Architecture risks
 
             Important rules:
 
@@ -57,16 +58,18 @@ def create_solution_architect(llm, user_input, context=None):
             - Consider scalability and maintainability.
             - Consider security requirements.
             - Respect the user's constraints and preferences.
-            - Do not make technology choices that contradict the
-              business requirements.
+            - Do not make technology choices that belong to the
+            Technology Advisor.
+            - Every connection source and target must refer to an
+            existing component id.
             - Return ONLY valid JSON matching EXACTLY the expected schema.
         """,
 
         expected_output=(
             "A JSON object containing architecture_style, components, "
-            "database, cache, data_flow, security, scalability, "
-            "mvp_architecture, future_evolution, architecture_rationale, "
-            "and architecture_risks."
+            "connections, database, cache, data_flow, security, "
+            "scalability, mvp_architecture, future_evolution, "
+            "architecture_rationale, and architecture_risks."
         ),
 
         agent=solution_architect_agent,
@@ -75,3 +78,5 @@ def create_solution_architect(llm, user_input, context=None):
     )
 
     return solution_architect_agent, solution_architecture_task
+
+

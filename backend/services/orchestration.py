@@ -18,7 +18,7 @@ def create_solution_crew(llm, user_input):
     )
     
     delivery_planner, delivery_planner_task = create_delivery_planner(
-        llm, context=[business_analysis_task, solution_architect_task, technology_advisor_task]
+        llm, user_input, context=[business_analysis_task, solution_architect_task, technology_advisor_task]
     )
 
     crew = Crew(
