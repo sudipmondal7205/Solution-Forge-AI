@@ -164,3 +164,5 @@ websocket-client==1.9.2
 websockets==16.1.1
 yarl==1.25.1
 zipp==4.1.0
+streamlit>=1.32
+requests>=2.31
