@@ -43,6 +43,10 @@ def start_consultation(
     user_id: str = Depends(get_current_user_id),
 ):
     """Save the user input, start CrewAI, and stream agent outputs live."""
+    from ..agents._prompt_safety import llm_contains_injection, BLOCKED_INPUT_MESSAGE
+
+    if llm_contains_injection(payload.business_idea):
+        raise HTTPException(status_code=422, detail=BLOCKED_INPUT_MESSAGE)
     
     # 1) Save the consultation in MongoDB as 'in_progress'
     consultation = create_consultation(user_id, payload.model_dump(mode="json"))
