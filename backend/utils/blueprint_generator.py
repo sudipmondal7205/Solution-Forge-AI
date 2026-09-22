@@ -41,8 +41,10 @@ Design notes
 """
 
 from __future__ import annotations
-
+import base64
 import html as _html
+from pathlib import Path
+
 from datetime import datetime, timedelta, timezone
 from string import Template
 from typing import Any, Iterable, Optional
@@ -707,7 +709,7 @@ PAGE_TEMPLATE = Template(r"""<!DOCTYPE html>
   .app{display:flex;min-height:100vh;}
   .sidebar{width:230px;background:var(--primary-dark);color:#cdd6ee;flex-shrink:0;padding:22px 16px;display:flex;flex-direction:column;}
   .sidebar .logo{display:flex;align-items:center;gap:10px;color:#fff;font-weight:700;font-size:17px;margin-bottom:4px;}
-  .sidebar .logo-mark{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#3b5bfd,#7b3fe4);display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .sidebar .logo-mark{width:32px;height:32px;border-radius:8px;object-fit:contain;flex-shrink:0;}
   .sidebar .tagline{font-size:11px;color:#8891ab;margin-bottom:28px;}
   .sidebar nav a{display:flex;align-items:center;gap:10px;color:#c3cbe4;text-decoration:none;padding:10px 12px;border-radius:8px;font-size:14px;margin-bottom:4px;}
   .sidebar nav a.active{background:#22305a;color:#fff;}
@@ -801,7 +803,10 @@ PAGE_TEMPLATE = Template(r"""<!DOCTYPE html>
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="logo"><span class="logo-mark">S</span> SolutionForge AI</div>
+    <div class="logo">
+    <img src="$LOGO_ICON" class="logo-mark" alt="SolutionForge Logo">
+    SolutionForge AI
+</div>
     <div class="tagline">From Ideas to Implementable Solutions</div>
     <nav>
       <a href="#" class="active">🏠 Your Solution</a>
@@ -894,6 +899,16 @@ function toggleDomain(id){
 # Public entry point
 # ---------------------------------------------------------------------------
 
+def _logo_data_uri() -> str:
+    """Return the logo as a base64 data URI so the standalone blueprint.html
+    keeps its image when downloaded or served at any URL."""
+    logo_path = Path(__file__).resolve().parents[2] / "frontend" / "assets" / "logo_icon.png"
+    try:
+        return "data:image/png;base64," + base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+
+
 def generate_blueprint_html(
     user_input: dict,
     agent_outputs: dict,
@@ -938,6 +953,7 @@ def generate_blueprint_html(
     )
 
     html = PAGE_TEMPLATE.safe_substitute(
+        LOGO_ICON=_logo_data_uri(),
         BUSINESS_TITLE=esc(business_title_short),
         GENERATED_LABEL=esc((user_input or {}).get("requested_by", "Generated report")),
         GENERATED_AT=esc(_ist_now().strftime("%b %d, %Y • %I:%M %p IST")),
