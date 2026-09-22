@@ -3,6 +3,7 @@ from backend.agents.business_analyst import create_business_analyst
 from backend.agents.solution_architect import create_solution_architect
 from backend.agents.technology_advisor import create_technology_advisor
 from backend.agents.delivery_planner import create_delivery_planner
+from backend.core.llm import gemini_llm
 
 
 
@@ -14,7 +15,7 @@ def create_solution_crew(llm, user_input):
     )
     
     technology_advisor, technology_advisor_task = create_technology_advisor(
-        llm, user_input, context=[business_analysis_task, solution_architect_task]
+        gemini_llm, user_input, context=[business_analysis_task, solution_architect_task]
     )
     
     delivery_planner, delivery_planner_task = create_delivery_planner(

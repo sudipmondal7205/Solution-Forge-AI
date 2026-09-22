@@ -3,7 +3,6 @@ from crewai import Agent, Task
 from crewai.tools import tool
 from backend.models.technology_advisor import TechnologyRecommendation
 from backend.core.config import settings
-from backend.core.llm import gemini_llm
 from backend.agents._prompt_safety import render_user_input_block, neutralise
 
 def create_technology_advisor(llm, 
@@ -89,7 +88,7 @@ def create_technology_advisor(llm,
 
         tools=[serper_search_tool],
 
-        llm=gemini_llm,
+        llm=llm,
         verbose=True,
         allow_delegation=False,
 
