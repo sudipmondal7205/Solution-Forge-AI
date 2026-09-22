@@ -2,7 +2,7 @@
   <img src="frontend/assets/logo_full.png" alt="SolutionForge AI" width="260"/>
 </p>
 
-<h1 align="center">⚒️ SolutionForge AI</h1>
+
 
 <p align="center">
   <b>From idea ➜ implementable solution blueprint in minutes.</b><br/>
