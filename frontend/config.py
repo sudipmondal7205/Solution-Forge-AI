@@ -83,7 +83,7 @@ surfaces `detail` directly to the user.
 USE_MOCK_DATA = False
 
 # Base URL of the FastAPI backend (no trailing slash).
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "https://solution-forge-ai.onrender.com"
 
 # Request timeout (seconds) for all outgoing HTTP calls.
 REQUEST_TIMEOUT = 15
