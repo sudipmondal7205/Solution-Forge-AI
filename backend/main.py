@@ -22,7 +22,7 @@ app.include_router(consultations.router)
 
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     """Quick check that the API + MongoDB are reachable."""
     db.command("ping")
